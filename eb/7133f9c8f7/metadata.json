@@ -3,7 +3,7 @@
   "checkpoint_id": "eb7133f9c8f7",
   "strategy": "manual-commit",
   "branch": "phase1-core-loop",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "codewalk/README.md",
     "docs/IMPLEMENTATION_PLAN.md"
@@ -14,13 +14,19 @@
       "transcript": "/eb/7133f9c8f7/0/full.jsonl",
       "content_hash": "/eb/7133f9c8f7/0/content_hash.txt",
       "prompt": "/eb/7133f9c8f7/0/prompt.txt"
+    },
+    {
+      "metadata": "/eb/7133f9c8f7/1/metadata.json",
+      "transcript": "/eb/7133f9c8f7/1/full.jsonl",
+      "content_hash": "/eb/7133f9c8f7/1/content_hash.txt",
+      "prompt": "/eb/7133f9c8f7/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 5731,
-    "cache_creation_tokens": 396485,
-    "cache_read_tokens": 6026253,
-    "output_tokens": 64275,
-    "api_call_count": 48
+    "input_tokens": 5765,
+    "cache_creation_tokens": 568538,
+    "cache_read_tokens": 7420304,
+    "output_tokens": 88029,
+    "api_call_count": 67
   }
 }
