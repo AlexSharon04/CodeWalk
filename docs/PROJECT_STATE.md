@@ -5,7 +5,7 @@
 **Current step:** Phase 1 plan drafted. Ready to begin execution (17 tasks).
 
 ## Phase status
-- [ ] Phase 1 — Core Loop (segmenter + CodeLens + block highlights) — **spec drafted, awaiting review**
+- [ ] Phase 1 — Core Loop (segmenter + CodeLens + block highlights) — **spec approved, plan ready for execution**
 - [ ] Phase 2 — Level 1 Explanations (Comment Controller)
 - [ ] Phase 3 — Navigation & File Queue
 - [ ] Phase 4 — Level 2 & Polish
@@ -28,8 +28,7 @@ None currently — Phase 1 spec is complete. Next questions arrive when writing 
 - **2026-04-17** — Developer uses Groq free tier for day-to-day iteration (integrated GPU + 16 GB RAM is too slow for local Ollama); shipped default remains Ollama-local.
 
 ## What's next
-1. User reviews `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md`.
-2. Address any requested changes; re-run self-review.
-3. Invoke the `writing-plans` skill to convert the approved spec into a step-by-step implementation plan under `docs/superpowers/plans/`.
-4. Execute the plan: scaffold `codewalk/`, build adapter + segmenter + providers, pass manual checklist, close Phase 1.
-5. Update this file at the phase close; begin Phase 2 brainstorming.
+1. Choose execution mode: subagent-driven (fresh subagent per task — recommended for isolation and speed) or inline (this session, with batch checkpoints).
+2. Execute Tasks 1–17 from `docs/superpowers/plans/2026-04-17-codewalk-phase1-core-loop.md`.
+3. Update this file at each phase-step boundary; mark the phase complete at Task 17.
+4. Tag `phase1-complete` and begin Phase 2 brainstorming.
