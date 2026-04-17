@@ -1,0 +1,5 @@
+session start
+
+---
+
+ensure the readme contains explicit instructions for how users can test this agent so far. make sure the actual agent is a .md file like we said to be easy to change. make sure the implimentation plan reflects our changes to the backend potential (ollama default (also is good for private reposiotries and unsharable code), with api key use and access as well). make sure we have the UI / UX ready to go for future development, and make sure the development plans of 2, 3, and 4 look good. i want to manually verify before going onto the next phase
