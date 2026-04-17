@@ -7,7 +7,7 @@
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other", "Education"],
   "main": "./dist/extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": ["onCommand:codewalk.startWalkthrough"],
   "contributes": {
     "commands": [
       { "command": "codewalk.startWalkthrough", "title": "Start CodeWalk", "icon": "$(book)" },
@@ -21,11 +21,6 @@
           "enum": ["ollama-local", "openrouter", "groq", "openai", "anthropic-oai", "together", "custom"],
           "default": "ollama-local",
           "description": "LLM backend preset. Sets baseUrl automatically unless overridden."
-        },
-        "codewalk.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "API key for the selected backend. Leave blank for ollama-local."
         },
         "codewalk.model": {
           "type": "string",

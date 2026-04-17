@@ -26,6 +26,11 @@ export class BlockHighlighter implements vscode.Disposable {
       vscode.window.onDidChangeVisibleTextEditors((editors) => {
         for (const editor of editors) this.applyToEditor(editor);
       }),
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration("codewalk.showBlockHighlights")) {
+          for (const editor of vscode.window.visibleTextEditors) this.applyToEditor(editor);
+        }
+      }),
     ];
   }
 
