@@ -13,6 +13,8 @@
 - **Pace.** Heavy development — the user is moving fast. Don't re-brainstorm what `CodeWalk-design-doc.md` already decides; scope each phase tightly and ship.
 - **Design doc authority.** `CodeWalk-design-doc.md` is the master spec. When in doubt, follow it. If a per-phase spec contradicts it, flag the contradiction explicitly before proceeding.
 - **`.entire/` is telemetry.** Do not author state there. It is an external session-logging tool; its `metadata/` folder is read-denied.
+- **ADR-005 is the contract for every LLM-backed component.** Input guard → parse → per-item validate → cross-item validate → single retry with threaded failure reason → `logger`-injected diagnostics → env-gated eval harness with loose thresholds. Cancellation propagates via `CancellationToken` → `AbortSignal`; caller-visible ids are content-hashed. When adding a new prompt/agent (Phase 2's `explanation.md`, Phase 4's line-by-line, etc.), ship equivalents for every rule. Deviations require a new ADR. See `docs/ARCHITECTURE_DECISIONS.md` ADR-005.
+- **API keys live in `context.secrets`, never in `settings.json`.** Read with `getApiKey(context)` from `src/utils/secrets.ts`; write with `setApiKey`. The `codewalk.apiKey` setting no longer exists as a source of truth — `migrateLegacyApiKey` on activation clears it. If you need an API key in new code, take `ExtensionContext` and call `getApiKey`.
 
 ## File conventions
 - Per-phase specs: `docs/superpowers/specs/YYYY-MM-DD-codewalk-phaseN-<topic>.md`

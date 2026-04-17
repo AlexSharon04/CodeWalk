@@ -1,11 +1,11 @@
 # CodeWalk — Project State
 
 **Last updated:** 2026-04-17
-**Current phase:** Phase 1 — Core Loop — **code complete, awaiting manual verification**
-**Current step:** All 17 plan tasks landed plus ADR-004 first-run wizard polish. Manual smoke test pending before Phase 2 brainstorm.
+**Current phase:** Phase 1 — Core Loop — **hardened, awaiting manual verification**
+**Current step:** All 17 plan tasks landed plus ADR-004 (first-run wizard) and ADR-005 (LLM-call validation contract + cancellation + SecretStorage + hash ids). Manual smoke test pending before Phase 2 brainstorm.
 
 ## Phase status
-- [x] Phase 1 — Core Loop (segmenter + CodeLens + block highlights + first-run wizard) — **code complete 2026-04-17; manual verification pending**
+- [x] Phase 1 — Core Loop (segmenter + CodeLens + block highlights + first-run wizard + pre-Phase-2 hardening) — **code complete and hardened 2026-04-17; manual verification pending**
 - [ ] Phase 2 — Level 1 Explanations (Comment Controller)
 - [ ] Phase 3 — Navigation & File Queue
 - [ ] Phase 4 — Level 2 & Polish
@@ -31,17 +31,37 @@ Run through both backend paths. Both must pass on the current commit.
 - [ ] Clicking a CodeLens is a no-op (expected for Phase 1).
 
 ### Cloud-API-key path
-- [ ] Clear `codewalk.apiKey` in user settings (simulate fresh install).
+- [ ] Delete any stored key from SecretStorage (e.g. run `CodeWalk` with a fresh profile, or manually clear via an ephemeral command). Setting `codewalk.apiKey` in `settings.json` NO LONGER configures the key — SecretStorage is the source of truth.
 - [ ] Set `codewalk.backend = "groq"` (or another cloud preset).
 - [ ] Run `CodeWalk: Start Walkthrough` → wizard fires.
 - [ ] Pick a preset, paste a real API key → walkthrough proceeds without re-running the command.
 - [ ] Cancelling the wizard cleanly aborts (no error toast, no partial state).
-- [ ] Restart window → wizard does NOT fire (key persisted at Global scope).
+- [ ] Restart window → wizard does NOT fire (key persisted in the OS keychain).
+- [ ] Confirm the key does NOT appear in `settings.json` after the wizard completes.
+
+### Legacy-key migration (one-shot, runs on activation)
+- [ ] Pre-seed `settings.json` with `"codewalk.apiKey": "sk-test-legacy"` (any value).
+- [ ] Reload the window. Activation fires `migrateLegacyApiKey`.
+- [ ] Verify `codewalk.apiKey` is gone from `settings.json`.
+- [ ] Verify `Start CodeWalk` works without re-prompting the wizard (key is now in SecretStorage).
+- [ ] Reload again — migration does NOT re-run (flag persisted in `globalState`).
+
+### Cancellation
+- [ ] Start a walkthrough on a slowish file/backend; hit the Cancel button on the "CodeWalk: Analyzing…" progress notification.
+- [ ] Output channel shows `[cancelled] user cancelled CodeWalk analysis` — no error modal, no stack trace.
+- [ ] No partial state: store entry for the URI is cleared, no decorations applied.
+
+### Hash-id stability
+- [ ] Run a walkthrough; note a segment id from the Output channel logs (or inspect via a debugger).
+- [ ] Re-run on the same file unchanged; verify the same segment produces the SAME id.
+- [ ] Modify one line inside a block; re-run; verify that block's id changes while unrelated blocks' ids stay the same.
 
 ### Error-path spot checks
 - [ ] With Ollama stopped and `backend = "ollama-local"` + wizard result `ollama-local`: targeted "can't reach Ollama at …" error, not generic network error.
 - [ ] Bad API key: `AuthError` path fires "API key rejected" + Open Settings button.
-- [ ] `codewalk.showBlockHighlights = false`: tints disappear, CodeLens labels remain.
+- [ ] `codewalk.showBlockHighlights = false`: tints disappear immediately (no walkthrough re-run needed); CodeLens labels remain.
+- [ ] File > 2000 lines: warning toast "CodeWalk can't analyze files over 2000 lines yet…"; no LLM call made.
+- [ ] Coverage < 70%: Output channel shows `[segmenter] WARN coverage below 70%` line alongside the summary.
 
 ### Prompt-iteration smoke test
 - [ ] Edit `codewalk/prompts/segmentation.md` (e.g., change rule 7 to say 50 chars).
