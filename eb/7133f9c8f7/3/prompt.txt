@@ -1,1 +1,5 @@
 session start: currently improving the segmentation agent logic to not have overlap segments, etc. i am looking for other sneaky bugs or sementic choices that dont align with the vision of codewalk before moving onto section two. please scan the repository over, dont overthink it, but alert me of any critical design choices that may be in our best intrest to change for the best codewalk extension possible
+
+---
+
+lets be ambitious and develop all 6 since i think they are all relevant to the codewalk vision. develop with intent knowing i have bypass permissions on and do not run anything risky
