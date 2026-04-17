@@ -4,6 +4,7 @@ import {
   type BackendKey,
   type ResolvedBackend,
 } from "../llm/presets";
+import { setApiKey } from "../utils/secrets";
 
 interface BackendOption extends vscode.QuickPickItem {
   backend: BackendKey;
@@ -62,7 +63,9 @@ const API_KEY_URLS: Partial<Record<BackendKey, string>> = {
   together: "https://api.together.xyz/settings/api-keys",
 };
 
-export async function runFirstRunWizard(): Promise<ResolvedBackend | undefined> {
+export async function runFirstRunWizard(
+  context: vscode.ExtensionContext,
+): Promise<ResolvedBackend | undefined> {
   const selected = await vscode.window.showQuickPick(BACKEND_OPTIONS, {
     title: "CodeWalk — Choose an LLM Backend",
     placeHolder: "Which AI should analyze your code?",
@@ -103,15 +106,27 @@ export async function runFirstRunWizard(): Promise<ResolvedBackend | undefined> 
 
   const cfg = vscode.workspace.getConfiguration("codewalk");
   await cfg.update("backend", selected.backend, vscode.ConfigurationTarget.Global);
-  await cfg.update("apiKey", apiKey, vscode.ConfigurationTarget.Global);
-  await cfg.update("baseUrl", baseUrl, vscode.ConfigurationTarget.Global);
+  // API keys live in SecretStorage (OS keychain), never in settings.json.
+  await setApiKey(context, apiKey);
+  // Only write baseUrl for custom — for preset backends, leave any user override intact
+  // (e.g. a power user pointing ollama-local at a remote GPU box).
+  if (selected.backend === "custom") {
+    await cfg.update("baseUrl", baseUrl, vscode.ConfigurationTarget.Global);
+  }
   // Clear any stale model override so the new preset's default applies.
   await cfg.update("model", "", vscode.ConfigurationTarget.Global);
+
+  // For non-custom backends, fall back to whatever baseUrl the user already had set
+  // (empty = resolveBackend picks the preset default).
+  const effectiveBaseUrl =
+    selected.backend === "custom"
+      ? baseUrl
+      : cfg.get<string>("baseUrl", "");
 
   return resolveBackend({
     backend: selected.backend,
     apiKey,
     model: "",
-    baseUrl,
+    baseUrl: effectiveBaseUrl,
   });
 }

@@ -1,5 +1,6 @@
 import {
   AuthError,
+  CancelledError,
   MalformedResponseError,
   NetworkError,
   RateLimitError,
@@ -46,8 +47,12 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        signal: options?.signal,
       });
     } catch (e) {
+      if (options?.signal?.aborted || (e as Error).name === "AbortError") {
+        throw new CancelledError();
+      }
       throw new NetworkError(`Failed to reach ${url}: ${(e as Error).message}`, e);
     }
 
@@ -68,6 +73,9 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     try {
       parsed = (await response.json()) as ChatResponseBody;
     } catch (e) {
+      if (options?.signal?.aborted || (e as Error).name === "AbortError") {
+        throw new CancelledError();
+      }
       throw new MalformedResponseError(`Response body was not valid JSON: ${(e as Error).message}`);
     }
 

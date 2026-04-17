@@ -101,3 +101,84 @@ The wizard triggers from `startWalkthrough.ts` when `(ollama-local selected AND 
 - The wizard writes to `ConfigurationTarget.Global`, so keys persist across workspaces but never commit to a project's `.vscode/settings.json`.
 - If the user picks Ollama-local in the wizard but Ollama still isn't running, a targeted error ("CodeWalk can't reach Ollama at …") fires rather than the generic "couldn't reach the LLM" that would come later from the adapter.
 - No unit tests — `QuickPick` / `InputBox` interactions require extension-host UI automation that's disproportionate to the payoff. The wizard calls `resolveBackend` (already tested in Task 6) for its return value.
+
+---
+
+## ADR-005 — LLM-call validation contract (segmenter canonical, explanation to follow)
+
+**Status.** Accepted (2026-04-17)
+**Refines.** Phase 1 spec §4.5 and §6 (segmenter behavior, error handling).
+**Applies to.** Every LLM-backed component from Phase 1 onward — starting with the segmenter, extended by Phase 2's explanation agent, Phase 4's line-by-line annotator, and any future `prompts/*.md` prompt.
+
+**Context.**
+The Phase 1 spec described the segmenter as a "parse → validate → retry once → return" pipeline, but left several cross-cutting rules implicit: what constitutes a validation failure, what the retry prompt must say, whether partial drops are acceptable, and how diagnostics surface to the user. In practice, LLM outputs fail in predictable ways — overlapping ranges, missing lines, silent quality degradation on weak models, oversized inputs that blow token budgets — and each failure mode needs a defined response. A post-Phase-1 hardening pass (see `PROJECT_STATE.md` recent decisions) codified these rules in the segmenter. Phase 2's explanation agent will need the same shape, and without a written contract it will drift.
+
+**Decision.**
+Every LLM-backed component in CodeWalk MUST implement the following pipeline, and any deviation MUST be justified in its own ADR.
+
+### 1. Input guard (pre-LLM)
+- Before constructing any prompt, reject inputs that exceed the component's documented budget by throwing a typed error subclassing `Error` (pattern: `FileTooLargeError` in `src/engine/segmenter.ts`). Never truncate silently.
+- Typed input-guard errors must expose the offending metric and the limit as readonly fields (`lineCount`, `maxLines` on `FileTooLargeError`).
+- Limits are exported constants (e.g. `DEFAULT_MAX_LINES = 2000`) overridable via the component's `Deps` interface, so tests and the eval harness can exercise the boundary without editing globals.
+
+### 2. Parse
+- Adapter is called with `responseFormat: "json_object"` on the first attempt. Parse failures throw an internal `ValidationFailure` with a human-readable reason (e.g. `"response is not valid JSON"`, `"response does not contain a 'segments' array"`). `ValidationFailure` is private to the component — it never leaks to callers; it is either recovered by the retry or repackaged as `MalformedResponseError`.
+
+### 3. Per-item validation
+- Each item in the response is validated independently. Items that fail are dropped, and a `droppedCount` is tracked.
+- If after per-item validation the result set is empty, raise `ValidationFailure("no items passed per-field validation")` — do NOT return an empty result to the caller.
+- Clamp obviously-recoverable out-of-range values (e.g. `endLine > document.lineCount` → clamp to `lineCount`). Clamping is preferable to dropping for errors the LLM commonly makes at document boundaries. Document every clamp in the prompt's comments and in the component's tests.
+
+### 4. Cross-item validation
+- After per-item validation and sorting, enforce invariants the prompt promised to the model (the segmenter promises non-overlap; future components will have their own). Invariant violations raise `ValidationFailure` with a message that names the conflicting items (e.g. `'segments overlap: "A" (1-3) and "B" (3-5)'`). Generic messages like `"validation failed"` are insufficient — the retry depends on specificity.
+- Enforce a deterministic sort order before assigning caller-visible identifiers (the segmenter sorts by `startLine` before assigning `seg-${i}`). Deterministic ids are a Phase-3 precondition for prev/next navigation.
+
+### 5. Retry (exactly once)
+- On `ValidationFailure` or `MalformedResponseError` from the first attempt, retry once with an augmented system message that threads the specific failure reason back to the model. The addendum must begin with `CRITICAL:` and name the exact failure (e.g. `"CRITICAL: your previous response failed validation: segments overlap: "A" (1-3) and "B" (3-5). Respond with ONLY the raw JSON object matching the schema..."`). Generic "try again" text without the failure reason is a regression and will be caught by the `retry prompt includes the specific validation failure reason` test pattern.
+- If the retry also fails for any reason (validation, malformed JSON, network error, adapter exhausted in tests), raise `MalformedResponseError` with `rawResponse` containing both attempts as JSON: `{"first": ..., "second": ...}`. Do not retry a third time.
+- Retry behavior is capped at one attempt per LLM call. No exponential backoff, no recursion. A component that needs more sophisticated retry (e.g. streaming reconnect) gets its own ADR.
+
+### 6. Diagnostics
+- `Deps` interface MUST accept an optional `logger: (message: string) => void`. Default is a no-op.
+- Every successful call logs one line at `[component]` prefix with: item count, coverage ratio (or analogous quality metric), and drop count when non-zero. Example: `[segmenter] 5 segment(s), coverage 87%, dropped 2`.
+- When a quality metric falls below the component's threshold (segmenter: `MIN_COVERAGE_RATIO = 0.7`), emit a WARN-prefixed second log line. The UI does not currently surface these, but the Output channel does; future UX can escalate them to user notifications without code surgery.
+- Secrets (API keys, raw prompts containing user source) MUST NOT be logged. Log metadata about the prompt (length, model), not its body.
+
+### 7. Eval harness
+- Each component that produces structured output gets a golden-fixture evaluator at `test/eval/<component>Eval.test.ts`. Gated behind a component-specific env var (`EVAL_SEGMENTER=1`, `EVAL_EXPLANATION=1`, etc.) so local `npm test` stays fast and CI-independent.
+- Scoring uses a metric appropriate to the output type — IoU over line ranges for segmentation, rubric-scored similarity for explanations (Phase 2 will define). Print one summary line per fixture; fail the test only when thresholds are violated.
+- Fixtures seed with one hand-labeled example and grow over time. The eval is a trend monitor, not a pass/fail gate — thresholds are tuned loose enough to tolerate weak-model noise, tight enough to catch prompt regressions.
+
+**Rationale.**
+- **Cross-item invariants are the LLM failure mode.** Schema-shape validation is easy; the model fills the slots. Rules about how items relate (overlap, coverage, ordering) are where weak models and tired models silently produce broken output. Encoding these rules once, in code, turns "silent UI bug" into "retry opportunity" in every component that follows the pattern.
+- **Specific retry beats strict retry.** A retry prompt that says "be stricter" doesn't move a Llama 3.3 past a mistake. Threading the exact validation failure back to the model ("your response overlapped segments X and Y") typically fixes the issue in one additional round, which is the difference between a functional extension on cheap local models and one that only works on Claude Sonnet.
+- **Diagnostics as a ports-and-adapters boundary.** Components don't know about `OutputChannel`; they accept a `(msg: string) => void`. Same surface redirects to an in-memory buffer for tests, to `console.log` in the eval harness, to the Output channel in production. Testability and production observability are the same concern.
+- **Eval harness as trend signal, not CI gate.** A tight eval threshold fails constantly on small local models and gets muted; a loose one with printed summaries lets the developer watch the IoU trend across prompt edits. The second is far more useful. Phase 2's explanation eval will follow the same philosophy (rubric-score printouts, threshold on catastrophic regressions only).
+
+**Consequences.**
+- Phase 2's `prompts/explanation.md` must mirror the contract. The explanation agent will have its own `ExplanationValidationFailure`-equivalent, its own `CRITICAL: …` retry addendum threading the failure reason, and its own eval harness at `test/eval/explanationEval.test.ts` with rubric-based scoring.
+- New typed errors may be added (the segmenter added `FileTooLargeError`); they must be exported alongside `adapter.ts` error classes and handled in `startWalkthrough.ts`'s `handleError` cascade with a user-facing message.
+- The retry-once-with-specific-reason pattern is load-bearing. If Phase 3's streaming explanation ever needs multi-step retry, it must file a superseding ADR rather than ad-hoc extending this contract.
+- `DEFAULT_MAX_LINES = 2000` is a fixed ceiling for Phase 1. Users hitting it on large files see a targeted warning, not a silent failure. Raising or making it configurable is a Phase 4 polish question, not a Phase 2 blocker.
+- The eval harness is manual-invocation (gated env var). CI remains Ollama-free. A future ADR can formalize periodic eval runs (e.g. a scheduled GitHub Action against a hosted model), but that's out of scope for the MVP.
+
+**Test coverage (reference implementation — segmenter).**
+All seven contract rules have at least one test in `codewalk/test/suite/segmenter.test.ts`:
+- Input guard: `throws FileTooLargeError before calling the adapter`.
+- Parse: `throws MalformedResponseError after two failed attempts`.
+- Per-item validation: `rejects segments with endLine < startLine`, `rejects segments with empty label`, `clamps endLine to document lineCount`.
+- Cross-item validation: `rejects overlapping segments (triggers retry)`, `sorts segments by startLine before returning`.
+- Retry: `retries on malformed JSON and succeeds`, `retry prompt includes the specific validation failure reason`.
+- Identifier stability: `segment ids are stable across identical re-runs`, `segment ids change when block content changes`.
+- Diagnostics: `logger receives segment count, coverage, and drop count`.
+- Eval harness: `test/eval/segmenterEval.test.ts` — gated by `EVAL_SEGMENTER=1`, IoU over one golden fixture.
+
+Phase 2's explanation agent is expected to ship with equivalents for every bullet above.
+
+### Addendum (2026-04-17) — Cancellation and content-hash identifiers
+
+Two further rules folded into the contract after the initial draft landed, because both are visible at the `Deps` surface and Phase 2 callers will rely on them:
+
+**Cancellation propagation.** `Deps` MUST accept an optional `token: vscode.CancellationToken`. Implementations translate it to an `AbortSignal` (see `toAbortSignal` helper in `segmenter.ts`) and pass that to `adapter.complete` via `CompleteOptions.signal`. Cancellation is also checked synchronously (`throwIfCancelled`) between LLM calls — before the first attempt, and between the first attempt and the retry — so a user cancel during the retry gap doesn't burn the second call. On cancellation, adapters throw `CancelledError` (exported from `adapter.ts` alongside the other typed errors); the segmenter re-throws it without wrapping, and `startWalkthrough.ts`'s `handleError` treats it as a silent Output-channel log line (no toast, no error modal). The Progress notification runs with `cancellable: true`, so a Cancel button appears automatically. Phase 2's explanation panel, which opens during a walkthrough, MUST thread the same token so the user can abort a slow expansion the same way.
+
+**Content-hash identifiers.** Caller-visible ids are derived from segment content (label + startLine + endLine + code text), not from return order. Reference implementation: `computeSegmentId` in `segmenter.ts` returns `seg-<12 hex chars>` from a SHA-256 of a null-byte-separated tuple. This change — superseding the earlier `seg-${i}` scheme — is load-bearing for Phase 2: when the user re-runs `Start CodeWalk` on an unchanged file, they should see the SAME ids, so any explanation cache Phase 2 builds keys correctly across runs. When block content changes, ids change, and the stale cache entry is naturally orphaned. Tests `segment ids are stable across identical re-runs` and `segment ids change when block content changes` pin this behavior. Phase 2's explanation records MUST also use content-derived ids (likely `exp-<hash-of-segment-id+prompt-version>`) for the same cache-eviction property.

@@ -1,11 +1,12 @@
 import * as vscode from "vscode";
 import type { BackendKey, UserConfig } from "../llm/presets";
+import { getApiKey } from "./secrets";
 
-export function readUserConfig(): UserConfig {
+export async function readUserConfig(context: vscode.ExtensionContext): Promise<UserConfig> {
   const c = vscode.workspace.getConfiguration("codewalk");
   return {
     backend: c.get<BackendKey>("backend", "ollama-local"),
-    apiKey: c.get<string>("apiKey", ""),
+    apiKey: await getApiKey(context),
     model: c.get<string>("model", ""),
     baseUrl: c.get<string>("baseUrl", ""),
   };

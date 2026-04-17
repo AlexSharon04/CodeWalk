@@ -1,13 +1,36 @@
 import * as vscode from "vscode";
+import { createHash } from "node:crypto";
 import type { Segment, Difficulty } from "../types";
 import type { ChatMessage, LLMAdapter } from "../llm/adapter";
-import { MalformedResponseError } from "../llm/adapter";
+import { CancelledError, MalformedResponseError } from "../llm/adapter";
 import { loadPrompt } from "../prompts/loader";
 
-const RETRY_SYSTEM_ADDENDUM =
-  "\n\nCRITICAL: your previous response was not valid JSON. Respond with ONLY the raw JSON object — no markdown fences, no commentary, no explanation. Begin your response with { and end with }.";
-
 const VALID_DIFFICULTIES = new Set<Difficulty>(["trivial", "standard", "complex", "critical"]);
+
+export const DEFAULT_MAX_LINES = 2000;
+export const MIN_COVERAGE_RATIO = 0.7;
+
+export class FileTooLargeError extends Error {
+  constructor(
+    public readonly lineCount: number,
+    public readonly maxLines: number,
+  ) {
+    super(
+      `File has ${lineCount} lines; CodeWalk currently supports files up to ${maxLines} lines.`,
+    );
+    this.name = "FileTooLargeError";
+  }
+}
+
+export type SegmenterLogger = (message: string) => void;
+
+export interface SegmenterDeps {
+  adapter: LLMAdapter;
+  promptsDir: string;
+  maxLines?: number;
+  logger?: SegmenterLogger;
+  token?: vscode.CancellationToken;
+}
 
 interface RawSegment {
   label?: unknown;
@@ -17,15 +40,34 @@ interface RawSegment {
   difficulty?: unknown;
 }
 
-export interface SegmenterDeps {
-  adapter: LLMAdapter;
-  promptsDir: string;
+interface ValidatedSegment {
+  label: string;
+  oneLiner: string;
+  startLine: number;
+  endLine: number;
+  difficulty: Difficulty;
 }
+
+interface ParseResult {
+  segments: ValidatedSegment[];
+  droppedCount: number;
+}
+
+class ValidationFailure extends Error {}
 
 export async function segment(
   document: vscode.TextDocument,
   deps: SegmenterDeps,
 ): Promise<Segment[]> {
+  const maxLines = deps.maxLines ?? DEFAULT_MAX_LINES;
+  if (document.lineCount > maxLines) {
+    throw new FileTooLargeError(document.lineCount, maxLines);
+  }
+
+  const log = deps.logger ?? noop;
+  const signal = toAbortSignal(deps.token);
+  throwIfCancelled(deps.token);
+
   const numberedCode = numberLines(document.getText());
   const systemPrompt = loadPrompt(
     "segmentation",
@@ -40,79 +82,185 @@ export async function segment(
   const baseMessages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
 
   let firstRaw: string | undefined;
+  let firstFailureReason: string | undefined;
   try {
-    firstRaw = await deps.adapter.complete(baseMessages, { responseFormat: "json_object" });
-    return parseAndValidate(firstRaw, document);
+    firstRaw = await deps.adapter.complete(baseMessages, {
+      responseFormat: "json_object",
+      signal,
+    });
+    return finalize(parseAndValidate(firstRaw, document), document, log);
   } catch (firstError) {
-    if (!(firstError instanceof ValidationFailure) && !(firstError instanceof MalformedResponseError)) {
+    if (firstError instanceof CancelledError) throw firstError;
+    if (firstError instanceof ValidationFailure) {
+      firstFailureReason = firstError.message;
+    } else if (firstError instanceof MalformedResponseError) {
+      firstFailureReason = "response was not valid JSON";
+    } else {
       throw firstError;
     }
-    const retryMessages: ChatMessage[] = [
-      { role: "system", content: systemPrompt + RETRY_SYSTEM_ADDENDUM },
-    ];
+
+    throwIfCancelled(deps.token);
+
+    const retrySystem =
+      systemPrompt +
+      `\n\nCRITICAL: your previous response failed validation: ${firstFailureReason}. Respond with ONLY the raw JSON object matching the schema — no markdown fences, no commentary, no explanation. Begin with { and end with }.`;
+    const retryMessages: ChatMessage[] = [{ role: "system", content: retrySystem }];
+
     let secondRaw: string | undefined;
     try {
-      secondRaw = await deps.adapter.complete(retryMessages, { responseFormat: "json_object" });
-      return parseAndValidate(secondRaw, document);
+      secondRaw = await deps.adapter.complete(retryMessages, {
+        responseFormat: "json_object",
+        signal,
+      });
+      return finalize(parseAndValidate(secondRaw, document), document, log);
     } catch (secondError) {
+      if (secondError instanceof CancelledError) throw secondError;
       throw new MalformedResponseError(
-        "LLM did not return valid segment JSON after retry",
+        `LLM did not return valid segment JSON after retry. First failure: ${firstFailureReason}. Second failure: ${(secondError as Error).message ?? String(secondError)}`,
         JSON.stringify({ first: firstRaw, second: secondRaw ?? "<no response>" }),
       );
     }
   }
 }
 
-class ValidationFailure extends Error {}
+function toAbortSignal(token?: vscode.CancellationToken): AbortSignal | undefined {
+  if (!token) return undefined;
+  const controller = new AbortController();
+  if (token.isCancellationRequested) controller.abort();
+  else token.onCancellationRequested(() => controller.abort());
+  return controller.signal;
+}
+
+function throwIfCancelled(token?: vscode.CancellationToken): void {
+  if (token?.isCancellationRequested) throw new CancelledError();
+}
 
 function numberLines(text: string): string {
   return text.split("\n").map((line, i) => `${i + 1}: ${line}`).join("\n");
 }
 
-function parseAndValidate(raw: string, document: vscode.TextDocument): Segment[] {
+function parseAndValidate(raw: string, document: vscode.TextDocument): ParseResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new ValidationFailure("Response is not valid JSON");
+    throw new ValidationFailure("response is not valid JSON");
   }
-  if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { segments?: unknown }).segments)) {
-    throw new ValidationFailure("Response does not contain a 'segments' array");
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !Array.isArray((parsed as { segments?: unknown }).segments)
+  ) {
+    throw new ValidationFailure("response does not contain a 'segments' array");
   }
+
   const rawSegments = (parsed as { segments: RawSegment[] }).segments;
   const lineCount = document.lineCount;
-  const validated: Segment[] = [];
-  for (let i = 0; i < rawSegments.length; i++) {
-    const r = rawSegments[i];
+  const validated: ValidatedSegment[] = [];
+  let droppedCount = 0;
+
+  for (const r of rawSegments) {
     const startLine = Number(r.startLine);
-    const endLine = Number(r.endLine);
+    let endLine = Number(r.endLine);
     const label = typeof r.label === "string" ? r.label.trim() : "";
     const oneLiner = typeof r.oneLiner === "string" ? r.oneLiner.trim() : "";
     const difficulty = typeof r.difficulty === "string" ? r.difficulty : "";
-    if (!Number.isInteger(startLine) || startLine < 1) continue;
-    if (!Number.isInteger(endLine) || endLine < startLine) continue;
-    if (endLine > lineCount) continue;
-    if (label.length === 0 || oneLiner.length === 0) continue;
-    if (!VALID_DIFFICULTIES.has(difficulty as Difficulty)) continue;
+
+    if (!Number.isInteger(startLine) || startLine < 1) { droppedCount++; continue; }
+    if (!Number.isInteger(endLine)) { droppedCount++; continue; }
+    if (endLine > lineCount) endLine = lineCount;
+    if (endLine < startLine) { droppedCount++; continue; }
+    if (label.length === 0 || oneLiner.length === 0) { droppedCount++; continue; }
+    if (!VALID_DIFFICULTIES.has(difficulty as Difficulty)) { droppedCount++; continue; }
+
+    validated.push({ label, oneLiner, startLine, endLine, difficulty: difficulty as Difficulty });
+  }
+
+  if (validated.length === 0) {
+    throw new ValidationFailure("no segments passed per-field validation");
+  }
+
+  validated.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
+
+  for (let i = 1; i < validated.length; i++) {
+    const prev = validated[i - 1];
+    const curr = validated[i];
+    if (curr.startLine <= prev.endLine) {
+      throw new ValidationFailure(
+        `segments overlap: "${prev.label}" (lines ${prev.startLine}-${prev.endLine}) and "${curr.label}" (lines ${curr.startLine}-${curr.endLine})`,
+      );
+    }
+  }
+
+  return { segments: validated, droppedCount };
+}
+
+function finalize(
+  parsed: ParseResult,
+  document: vscode.TextDocument,
+  log: SegmenterLogger,
+): Segment[] {
+  const { segments, droppedCount } = parsed;
+  const lineCount = document.lineCount;
+
+  const finalized: Segment[] = segments.map((s) => {
     const range = new vscode.Range(
-      startLine - 1,
+      s.startLine - 1,
       0,
-      Math.min(endLine, lineCount) - 1,
+      Math.min(s.endLine, lineCount) - 1,
       Number.MAX_SAFE_INTEGER,
     );
-    const codeText = document.getText(range);
-    validated.push({
-      id: `seg-${i}`,
-      label,
-      oneLiner,
-      startLine,
-      endLine,
-      code: codeText,
-      difficulty: difficulty as Difficulty,
-    });
+    const code = document.getText(range);
+    return {
+      id: computeSegmentId(s.label, s.startLine, s.endLine, code),
+      label: s.label,
+      oneLiner: s.oneLiner,
+      startLine: s.startLine,
+      endLine: s.endLine,
+      code,
+      difficulty: s.difficulty,
+    };
+  });
+
+  const coverage = computeCoverage(finalized, document);
+  log(
+    `[segmenter] ${finalized.length} segment(s), coverage ${(coverage * 100).toFixed(0)}%` +
+      (droppedCount > 0 ? `, dropped ${droppedCount}` : ""),
+  );
+  if (coverage < MIN_COVERAGE_RATIO) {
+    log(
+      `[segmenter] WARN coverage below ${Math.round(MIN_COVERAGE_RATIO * 100)}% — some non-blank lines were not segmented`,
+    );
   }
-  if (validated.length === 0) {
-    throw new ValidationFailure("No segments passed validation");
+
+  return finalized;
+}
+
+function computeCoverage(segments: Segment[], document: vscode.TextDocument): number {
+  const covered = new Set<number>();
+  for (const s of segments) {
+    for (let line = s.startLine; line <= s.endLine; line++) {
+      covered.add(line);
+    }
   }
-  return validated;
+  let nonBlankTotal = 0;
+  let nonBlankCovered = 0;
+  for (let i = 0; i < document.lineCount; i++) {
+    if (document.lineAt(i).text.trim().length === 0) continue;
+    nonBlankTotal++;
+    if (covered.has(i + 1)) nonBlankCovered++;
+  }
+  return nonBlankTotal === 0 ? 1 : nonBlankCovered / nonBlankTotal;
+}
+
+function noop(): void {
+  /* swallow logs when no logger injected */
+}
+
+function computeSegmentId(label: string, startLine: number, endLine: number, code: string): string {
+  // Content-derived so re-segmenting unchanged code yields the same id; downstream
+  // phase-2 thread persistence can key panel state on this without drift on re-runs.
+  const hash = createHash("sha256");
+  hash.update(`${label}\u0000${startLine}\u0000${endLine}\u0000${code}`);
+  return `seg-${hash.digest("hex").slice(0, 12)}`;
 }

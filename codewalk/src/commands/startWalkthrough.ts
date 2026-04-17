@@ -3,10 +3,11 @@ import { readUserConfig } from "../utils/config";
 import { resolveBackend } from "../llm/presets";
 import { OpenAICompatibleAdapter } from "../llm/openAiCompatibleAdapter";
 import { isOllamaReachable } from "../llm/ollamaDetection";
-import { segment } from "../engine/segmenter";
+import { FileTooLargeError, segment } from "../engine/segmenter";
 import type { SegmentStore } from "../engine/segmentStore";
 import {
   AuthError,
+  CancelledError,
   MalformedResponseError,
   NetworkError,
   RateLimitError,
@@ -30,7 +31,7 @@ export function registerStartWalkthrough(
       return;
     }
 
-    const userConfig = readUserConfig();
+    const userConfig = await readUserConfig(context);
     let resolved;
     try {
       resolved = resolveBackend(userConfig);
@@ -46,7 +47,7 @@ export function registerStartWalkthrough(
       resolved.backend !== "ollama-local" && resolved.requiresApiKey && !resolved.apiKey;
 
     if (ollamaNotReady || cloudKeyMissing) {
-      const wizardResult = await runFirstRunWizard();
+      const wizardResult = await runFirstRunWizard(context);
       if (!wizardResult) return; // user cancelled the wizard
       finalResolved = wizardResult;
       if (
@@ -70,13 +71,19 @@ export function registerStartWalkthrough(
 
     await vscode.window.withProgress(
       {
-        location: vscode.ProgressLocation.Window,
+        location: vscode.ProgressLocation.Notification,
         title: "CodeWalk: Analyzing…",
+        cancellable: true,
       },
-      async () => {
+      async (_progress, token) => {
         try {
           const promptsDir = context.asAbsolutePath("prompts");
-          const segments = await segment(document, { adapter, promptsDir });
+          const segments = await segment(document, {
+            adapter,
+            promptsDir,
+            logger: (msg) => output.appendLine(msg),
+            token,
+          });
           store.set(document.uri, segments);
           output.appendLine(`[success] ${segments.length} segments for ${document.fileName}`);
         } catch (e) {
@@ -98,6 +105,10 @@ function showSettingsError(message: string): void {
 }
 
 function handleError(e: unknown, output: vscode.OutputChannel): void {
+  if (e instanceof CancelledError) {
+    output.appendLine("[cancelled] user cancelled CodeWalk analysis");
+    return;
+  }
   if (e instanceof NetworkError) {
     output.appendLine(`[NetworkError] ${e.message}`);
     vscode.window.showErrorMessage(
@@ -113,6 +124,11 @@ function handleError(e: unknown, output: vscode.OutputChannel): void {
     output.appendLine(`[MalformedResponseError] ${e.message}\nRaw: ${e.rawResponse ?? "<none>"}`);
     showSettingsError(
       "CodeWalk couldn't parse the model's response. Try a more capable model in settings.",
+    );
+  } else if (e instanceof FileTooLargeError) {
+    output.appendLine(`[FileTooLargeError] ${e.message}`);
+    vscode.window.showWarningMessage(
+      `CodeWalk can't analyze files over ${e.maxLines} lines yet. This file has ${e.lineCount}.`,
     );
   } else {
     const err = e as Error;

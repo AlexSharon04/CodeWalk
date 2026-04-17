@@ -5,6 +5,14 @@ export interface ChatMessage {
 
 export interface CompleteOptions {
   responseFormat?: "json_object" | "text";
+  signal?: AbortSignal;
+}
+
+export class CancelledError extends Error {
+  constructor(message = "Operation cancelled by user") {
+    super(message);
+    this.name = "CancelledError";
+  }
 }
 
 export interface LLMAdapter {
