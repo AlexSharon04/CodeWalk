@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-04-17
 **Current phase:** Phase 1 — Core Loop
-**Current step:** Phase 1 spec drafted; awaiting user review before writing the implementation plan.
+**Current step:** Phase 1 plan drafted. Ready to begin execution (17 tasks).
 
 ## Phase status
 - [ ] Phase 1 — Core Loop (segmenter + CodeLens + block highlights) — **spec drafted, awaiting review**
@@ -11,8 +11,8 @@
 - [ ] Phase 4 — Level 2 & Polish
 
 ## Active artifacts
-- Phase 1 spec: `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md` *(draft — awaiting user approval)*
-- Phase 1 plan: *not yet written*
+- Phase 1 spec: `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md` *(approved 2026-04-17)*
+- Phase 1 plan: `docs/superpowers/plans/2026-04-17-codewalk-phase1-core-loop.md` *(17 tasks, awaiting execution)*
 - ADRs: `docs/ARCHITECTURE_DECISIONS.md` *(ADR-001, ADR-002, ADR-003 accepted)*
 
 ## Open questions
