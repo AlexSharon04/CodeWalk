@@ -1,0 +1,34 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "3b102db9e9c4",
+  "session_id": "9c7ba750-6e8a-4bcc-b9f6-ce94207eb5e3",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-17T12:28:16.352912Z",
+  "branch": "phase1-core-loop",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/ARCHITECTURE_DECISIONS.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "76811a385414",
+  "token_usage": {
+    "input_tokens": 2458,
+    "cache_creation_tokens": 1180051,
+    "cache_read_tokens": 20878974,
+    "output_tokens": 217966,
+    "api_call_count": 92
+  },
+  "session_metrics": {
+    "turn_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-17T12:28:11.6229822Z",
+    "agent_lines": 0,
+    "human_added": 171,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 171,
+    "agent_percentage": 0
+  }
+}

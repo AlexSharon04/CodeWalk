@@ -1,0 +1,25 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "3b102db9e9c4",
+  "strategy": "manual-commit",
+  "branch": "phase1-core-loop",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "docs/ARCHITECTURE_DECISIONS.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3b/102db9e9c4/0/metadata.json",
+      "transcript": "/3b/102db9e9c4/0/full.jsonl",
+      "content_hash": "/3b/102db9e9c4/0/content_hash.txt",
+      "prompt": "/3b/102db9e9c4/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2458,
+    "cache_creation_tokens": 1180051,
+    "cache_read_tokens": 20878974,
+    "output_tokens": 217966,
+    "api_call_count": 92
+  }
+}
