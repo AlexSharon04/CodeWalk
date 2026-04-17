@@ -1,0 +1,39 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "8dc16e5ff88a",
+  "session_id": "025b89f1-c0e6-4bc4-9938-46eb553b5923",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-17T21:05:57.5919973Z",
+  "branch": "phase1-core-loop",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "codewalk/.vscode-test.mjs",
+    "codewalk/src/commands/startWalkthrough.ts",
+    "codewalk/src/engine/segmenter.ts",
+    "codewalk/test/eval/segmenterEval.test.ts",
+    "codewalk/test/suite/segmenter.test.ts",
+    "docs/PROJECT_STATE.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "59f5003076fc",
+  "token_usage": {
+    "input_tokens": 5733,
+    "cache_creation_tokens": 398633,
+    "cache_read_tokens": 6433158,
+    "output_tokens": 66231,
+    "api_call_count": 50
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-17T21:05:56.8433701Z",
+    "agent_lines": 528,
+    "human_added": 4894,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 5422,
+    "agent_percentage": 9.738104020656584
+  }
+}

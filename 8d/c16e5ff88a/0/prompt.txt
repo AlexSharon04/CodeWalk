@@ -1,0 +1,9 @@
+session start, and then evalatue the effectivness of the segmenter agent in this project, any good? any more agents needed? unsure of how to improve agents themselves and need a second eye on it
+
+---
+
+lets impliment all 7!
+
+---
+
+impliment adr-005 that is a necissary feature before phase 2, also ensure that there are no other related gaps before phase 2. commit after you impliment adr-005 and any other missing gaps
