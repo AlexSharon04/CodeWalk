@@ -1,0 +1,67 @@
+{
+  "name": "codewalk",
+  "displayName": "CodeWalk",
+  "description": "AI-guided walkthroughs of unfamiliar codebases, block by block.",
+  "version": "0.1.0",
+  "publisher": "codewalk-dev",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other", "Education"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "codewalk.startWalkthrough", "title": "Start CodeWalk", "icon": "$(book)" },
+      { "command": "codewalk.expandBlock", "title": "Expand Block" }
+    ],
+    "configuration": {
+      "title": "CodeWalk",
+      "properties": {
+        "codewalk.backend": {
+          "type": "string",
+          "enum": ["ollama-local", "openrouter", "groq", "openai", "anthropic-oai", "together", "custom"],
+          "default": "ollama-local",
+          "description": "LLM backend preset. Sets baseUrl automatically unless overridden."
+        },
+        "codewalk.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the selected backend. Leave blank for ollama-local."
+        },
+        "codewalk.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model identifier. Leave blank to use the preset's default."
+        },
+        "codewalk.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Override the preset's baseUrl. Required when backend is 'custom'."
+        },
+        "codewalk.showBlockHighlights": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show background color tints for code blocks during a walkthrough."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "compile-tests": "tsc -p ./ --outDir out",
+    "pretest": "npm run compile-tests && npm run build",
+    "test": "vscode-test",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.20.0",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.0"
+  }
+}
