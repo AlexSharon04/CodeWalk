@@ -11,6 +11,7 @@ import {
   NetworkError,
   RateLimitError,
 } from "../llm/adapter";
+import { runFirstRunWizard } from "./firstRunWizard";
 
 export function registerStartWalkthrough(
   context: vscode.ExtensionContext,
@@ -38,23 +39,33 @@ export function registerStartWalkthrough(
       return;
     }
 
-    if (resolved.backend === "ollama-local") {
-      const ok = await isOllamaReachable(resolved.baseUrl);
-      if (!ok) {
-        showSettingsInfo("CodeWalk needs an LLM backend. Choose one to continue.");
+    let finalResolved = resolved;
+    const ollamaNotReady =
+      resolved.backend === "ollama-local" && !(await isOllamaReachable(resolved.baseUrl));
+    const cloudKeyMissing =
+      resolved.backend !== "ollama-local" && resolved.requiresApiKey && !resolved.apiKey;
+
+    if (ollamaNotReady || cloudKeyMissing) {
+      const wizardResult = await runFirstRunWizard();
+      if (!wizardResult) return; // user cancelled the wizard
+      finalResolved = wizardResult;
+      if (
+        finalResolved.backend === "ollama-local" &&
+        !(await isOllamaReachable(finalResolved.baseUrl))
+      ) {
+        vscode.window.showErrorMessage(
+          `CodeWalk can't reach Ollama at ${finalResolved.baseUrl}. Start Ollama and try again.`,
+        );
         return;
       }
-    } else if (resolved.requiresApiKey && !resolved.apiKey) {
-      showSettingsInfo("CodeWalk needs an API key for the selected backend.");
-      return;
     }
 
     store.clear(document.uri);
 
     const adapter = new OpenAICompatibleAdapter({
-      baseUrl: resolved.baseUrl,
-      apiKey: resolved.apiKey,
-      model: resolved.model,
+      baseUrl: finalResolved.baseUrl,
+      apiKey: finalResolved.apiKey,
+      model: finalResolved.model,
     });
 
     await vscode.window.withProgress(
@@ -74,16 +85,6 @@ export function registerStartWalkthrough(
       },
     );
   });
-}
-
-function showSettingsInfo(message: string): void {
-  vscode.window
-    .showInformationMessage(message, "Open Settings")
-    .then((action) => {
-      if (action === "Open Settings") {
-        vscode.commands.executeCommand("workbench.action.openSettings", "codewalk");
-      }
-    });
 }
 
 function showSettingsError(message: string): void {
