@@ -3,11 +3,13 @@
   "checkpoint_id": "8dc16e5ff88a",
   "strategy": "manual-commit",
   "branch": "phase1-core-loop",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
     "codewalk/.vscode-test.mjs",
+    "codewalk/package-lock.json",
     "codewalk/src/commands/startWalkthrough.ts",
     "codewalk/src/engine/segmenter.ts",
+    "codewalk/src/llm/adapter.ts",
     "codewalk/test/eval/segmenterEval.test.ts",
     "codewalk/test/suite/segmenter.test.ts",
     "docs/PROJECT_STATE.md"
@@ -24,13 +26,19 @@
       "transcript": "/8d/c16e5ff88a/1/full.jsonl",
       "content_hash": "/8d/c16e5ff88a/1/content_hash.txt",
       "prompt": "/8d/c16e5ff88a/1/prompt.txt"
+    },
+    {
+      "metadata": "/8d/c16e5ff88a/2/metadata.json",
+      "transcript": "/8d/c16e5ff88a/2/full.jsonl",
+      "content_hash": "/8d/c16e5ff88a/2/content_hash.txt",
+      "prompt": "/8d/c16e5ff88a/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 5733,
-    "cache_creation_tokens": 398633,
-    "cache_read_tokens": 6433158,
-    "output_tokens": 66231,
-    "api_call_count": 50
+    "input_tokens": 8199,
+    "cache_creation_tokens": 1979601,
+    "cache_read_tokens": 28090418,
+    "output_tokens": 295007,
+    "api_call_count": 146
   }
 }
