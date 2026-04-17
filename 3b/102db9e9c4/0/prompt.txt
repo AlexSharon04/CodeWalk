@@ -39,3 +39,11 @@ looks good
 ---
 
 A
+
+---
+
+i cant find where to put the api key in, how do we plan for other users to do this? cant be too much of a hassle or we will lose new users
+
+---
+
+yeah lets do it right now
