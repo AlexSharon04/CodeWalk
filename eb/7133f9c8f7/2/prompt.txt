@@ -1,0 +1,57 @@
+/brainstorming help me impliment the CodeWalk extension
+
+---
+
+A: but knowing that i am trying to get all of this together quickly with heavy development. make sure we know the project state etc. are you able to use the .entire folder which i think is saving our session logs to understand where we are in the project? or should we add a primer and memory files to the .claude folder and a CLAUDE markdown file that tells claude to read those first upon a new session. i dont want to have to remmeber what step we are on and want you to be able to keep the multi stage implimnetation plan in some sort of written persistant memory
+
+---
+
+A
+
+---
+
+what is the option that will make sense for most people? i dont know how people feel about elon and grok, so a local llm is tempting and since its also free and users wont have to make that account it could be better? what do you think, do i have a misconception here?
+
+---
+
+what is the more sustainable approach? do you think that groq will always let users do this? are local llms getting better and faster? what approach is going to last?
+
+---
+
+is the honsetly solution just to use openrouter api key to run, where the user can imput any api to get access to the best models? i dont want this CodeWalk to have limited knowledge and understanding by not allowing it to run the best models, the user should be able to plug in their own api key no matter if its from claude or openai or one from openrouter etc.
+
+---
+
+ires xe graphics i7 dell laptop 16gb ram, for 2 not sure you pick, i dont even know what 3 is asking
+
+---
+
+i like both of those decisions, lets do the phase 1 spec
+
+---
+
+looks good
+
+---
+
+1
+
+---
+
+A
+
+---
+
+i cant find where to put the api key in, how do we plan for other users to do this? cant be too much of a hassle or we will lose new users
+
+---
+
+yeah lets do it right now
+
+---
+
+create a readme with these setup steps like what fodler to start from inside vs code, what to hit or run to start the extension etc. you say f5 but i have my f buttons set to the volume control and brightnedd etc without having to press (alt or function?) help me get the full workflow inside of the readme
+
+---
+
+create a readme with these setup steps like what fodler to start from inside vs code, what to hit or run to start the extension etc. you say f5 but i have my f buttons set to the volume control and brightnedd etc without having to press (alt or function?) help me get the full workflow inside of the readme
