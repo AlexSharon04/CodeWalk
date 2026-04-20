@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { suite, test } from "mocha";
 import { loadPrompt } from "../../src/prompts/loader";
 import { explain, DEFAULT_MAX_SEGMENT_LINES, EXPLANATION_PROMPT_VERSION, SegmentTooLargeError, ExplanationStreamError } from "../../src/engine/explanationAgent";
+import { MalformedResponseError } from "../../src/llm/adapter";
 import type { LLMAdapter } from "../../src/llm/adapter";
 import type { Segment } from "../../src/types";
 
@@ -130,6 +131,47 @@ const VALID_RESPONSE = JSON.stringify({
   ],
 });
 
+const GENERIC_PTC_RESPONSE = JSON.stringify({
+  summary: "This is a valid-looking summary paragraph that says enough to pass the length check.",
+  pointsToConsider: {
+    assumptions: ["be careful with this code"],  // generic phrase — must be rejected
+    dangers: ["This block on line 3 concatenates user input without escaping it."],
+    sideEffects: [],
+  },
+  concepts: [],
+});
+
+const SHORT_SUMMARY_RESPONSE = JSON.stringify({
+  summary: "Short.",
+  pointsToConsider: { assumptions: [], dangers: [], sideEffects: [] },
+  concepts: [],
+});
+
+const DUP_CONCEPTS_RESPONSE = JSON.stringify({
+  summary: "This is a valid-looking summary paragraph that says enough to pass the length check.",
+  pointsToConsider: { assumptions: [], dangers: [], sideEffects: [] },
+  concepts: [
+    { name: "Closure", briefExplainer: "A closure captures variables from its defining scope. It allows inner functions to access outer-scope bindings after the outer function has returned.", relevance: "This block uses a closure to capture `config`." },
+    { name: "Closure", briefExplainer: "DUPLICATE — should be dropped.", relevance: "DUPLICATE." },
+  ],
+});
+
+const SUMMARY_EQUALS_ONELINER_RESPONSE = JSON.stringify({
+  summary: "   a test segment   ",  // matches fakeSegment().oneLiner when trim().toLowerCase() is applied; with padding passes 20-char check (length 20 before trim)
+  pointsToConsider: { assumptions: [], dangers: [], sideEffects: [] },
+  concepts: [],
+});
+
+const RETRY_SUCCEEDED_RESPONSE = JSON.stringify({
+  summary: "This is a valid summary after the retry — teaches the user what the block actually does.",
+  pointsToConsider: {
+    assumptions: ["Assumes `config` is defined before this block runs."],
+    dangers: [],
+    sideEffects: [],
+  },
+  concepts: [],
+});
+
 suite("explain() — input guard", () => {
   test("throws SegmentTooLargeError when segment exceeds maxSegmentLines", async () => {
     const seg = fakeSegment({ startLine: 1, endLine: 500 });
@@ -178,5 +220,79 @@ suite("explain() — happy path (non-streaming)", () => {
     assert.deepStrictEqual(Array.isArray(result.pointsToConsider.assumptions), true);
     assert.strictEqual(result.concepts.length, 1);
     assert.strictEqual(result.concepts[0]!.name, "Const binding");
+  });
+});
+
+suite("explain() — per-item validation", () => {
+  test("rejects summary shorter than 20 chars (MalformedResponseError after retry)", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([SHORT_SUMMARY_RESPONSE, SHORT_SUMMARY_RESPONSE]);
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      MalformedResponseError,
+    );
+  });
+
+  test("drops generic PTC items matching the generic-phrase regex", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([GENERIC_PTC_RESPONSE]);
+    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    // "be careful with this code" was dropped; the specific dangers item survived.
+    assert.strictEqual(result.pointsToConsider.assumptions.length, 0);
+    assert.strictEqual(result.pointsToConsider.dangers.length, 1);
+  });
+});
+
+suite("explain() — cross-item validation", () => {
+  test("dedupes duplicate concept names keeping first occurrence", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([DUP_CONCEPTS_RESPONSE]);
+    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(result.concepts.length, 1);
+    assert.ok(result.concepts[0]!.briefExplainer.includes("captures variables"));
+  });
+
+  test("retries when summary is identical to segment.oneLiner (case/whitespace-insensitive)", async () => {
+    const seg = fakeSegment();  // oneLiner: "a test segment"
+    const adapter = stubAdapter([SUMMARY_EQUALS_ONELINER_RESPONSE, RETRY_SUCCEEDED_RESPONSE]);
+    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.ok(result.summary.length > 20);
+    assert.notStrictEqual(result.summary.trim().toLowerCase(), seg.oneLiner.trim().toLowerCase());
+  });
+});
+
+suite("explain() — retry with threaded reason", () => {
+  test("retry prompt includes the specific failure reason from the first attempt", async () => {
+    const seg = fakeSegment();
+    const messages: Array<Array<{ role: string; content: string }>> = [];
+    const adapter: LLMAdapter = {
+      async complete(msgs) {
+        messages.push(msgs.map(m => ({ role: m.role, content: m.content })));
+        // First call: messages.length is 1 (after push), second call: messages.length is 2
+        return messages.length === 1 ? SUMMARY_EQUALS_ONELINER_RESPONSE : RETRY_SUCCEEDED_RESPONSE;
+      },
+      async *completeStream() { yield ""; },
+    };
+    await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(messages.length, 2);
+    const retrySystem = messages[1]!.find(m => m.role === "system")!.content;
+    assert.ok(retrySystem.includes("CRITICAL"));
+    assert.ok(
+      retrySystem.toLowerCase().includes("summary") && retrySystem.toLowerCase().includes("oneliner"),
+      "retry system prompt must name the specific validation failure",
+    );
+  });
+
+  test("retries once; second failure surfaces MalformedResponseError with both attempts", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([SHORT_SUMMARY_RESPONSE, SHORT_SUMMARY_RESPONSE]);
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      (err: Error) =>
+        err instanceof MalformedResponseError
+        && typeof (err as MalformedResponseError).rawResponse === "string"
+        && (err as MalformedResponseError).rawResponse!.includes("first")
+        && (err as MalformedResponseError).rawResponse!.includes("second"),
+    );
   });
 });

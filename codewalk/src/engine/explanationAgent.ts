@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { Explanation, Segment, Concept } from "../types";
-import type { ChatMessage, LLMAdapter } from "../llm/adapter";
+import type { LLMAdapter } from "../llm/adapter";
 import { CancelledError, MalformedResponseError } from "../llm/adapter";
 import { loadPrompt } from "../prompts/loader";
 
@@ -61,9 +61,12 @@ interface RawExplanation {
   concepts?: unknown;
 }
 
-// Task 5 will switch to throwing ValidationFailure on retry exhaustion; left here as placeholder.
-// Exported to mark it for future use in retry logic without triggering unused-variable warnings.
+// Task 5 — validation and retry.
 export class ValidationFailure extends Error {}
+
+const GENERIC_PTC_RE = /^(be careful|make sure|consider|note that|avoid|watch out|don't forget)\b/i;
+const MIN_SUMMARY_LEN = 20;
+const MIN_PTC_ITEM_LEN = 15;
 
 export async function explain(
   segment: Segment,
@@ -94,26 +97,52 @@ export async function explain(
     deps.promptsDir,
   );
 
-  const { system, user } = splitPrompt(prompt);
+  const { system: baseSystem, user } = splitPrompt(prompt);
 
-  const baseMessages: ChatMessage[] = [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
+  let firstRaw: string | undefined;
+  let firstReason: string | undefined;
+  const useJsonSchema = deps.structuredOutputMode === "json_schema";
 
-  const raw = await deps.adapter.complete(baseMessages, {
-    responseFormat: "json_object",
-  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    throwIfCancelled(deps.token);
 
-  // Rule 2 — parse. Rules 3–4 land in Task 5.
-  const parsed = parseAndValidate(raw, segment);
-  return {
-    segmentId: segment.id,
-    summary: parsed.summary,
-    pointsToConsider: parsed.pointsToConsider,
-    concepts: parsed.concepts,
-    renderState: "done",
-  };
+    const system = attempt === 0
+      ? baseSystem
+      : `${baseSystem}\n\nCRITICAL: your previous response failed validation: ${firstReason ?? "unknown"}. Respond with ONLY the raw JSON object matching the schema. No preamble, no Markdown fence.`;
+
+    const raw = await deps.adapter.complete(
+      [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      { responseFormat: useJsonSchema ? "json_object" : "json_object" },
+    );
+
+    try {
+      const validated = validateResponse(raw, segment);
+      return {
+        segmentId: segment.id,
+        summary: validated.summary,
+        pointsToConsider: validated.pointsToConsider,
+        concepts: validated.concepts,
+        renderState: "done",
+      };
+    } catch (err) {
+      if (err instanceof ValidationFailure) {
+        if (attempt === 0) {
+          firstRaw = raw;
+          firstReason = err.message;
+          continue;
+        }
+        throw new MalformedResponseError(
+          `validation failed on both attempts: ${err.message}`,
+          JSON.stringify({ first: firstRaw, second: raw }),
+        );
+      }
+      throw err;
+    }
+  }
+  throw new Error("unreachable");
 }
 
 function throwIfCancelled(token?: vscode.CancellationToken): void {
@@ -135,7 +164,7 @@ function guessLanguage(segment: Segment): string {
   return (segment as unknown as { languageId?: string }).languageId ?? "text";
 }
 
-function parseAndValidate(raw: string, _segment: Segment): {
+function validateResponse(raw: string, segment: Segment): {
   summary: string;
   pointsToConsider: Explanation["pointsToConsider"];
   concepts: Concept[];
@@ -144,37 +173,49 @@ function parseAndValidate(raw: string, _segment: Segment): {
   try {
     obj = JSON.parse(raw);
   } catch {
-    throw new MalformedResponseError("response is not valid JSON", raw);
+    throw new ValidationFailure("response is not valid JSON");
   }
 
-  if (typeof obj.summary !== "string" || obj.summary.length < 20) {
-    throw new MalformedResponseError("summary missing or too short", raw);
+  if (typeof obj.summary !== "string" || obj.summary.length < MIN_SUMMARY_LEN) {
+    throw new ValidationFailure(`summary is missing or shorter than ${MIN_SUMMARY_LEN} chars`);
+  }
+  if (obj.summary.trim().toLowerCase() === segment.oneLiner.trim().toLowerCase()) {
+    throw new ValidationFailure("summary is identical to segment.oneLiner — agent must expand on the one-liner, not echo it");
   }
 
-  const ptc = obj.pointsToConsider ?? {};
+  const ptcIn = obj.pointsToConsider ?? {};
   const pointsToConsider = {
-    assumptions: arrayOfStrings(ptc.assumptions),
-    dangers: arrayOfStrings(ptc.dangers),
-    sideEffects: arrayOfStrings(ptc.sideEffects),
+    assumptions: filterPtcItems(ptcIn.assumptions),
+    dangers: filterPtcItems(ptcIn.dangers),
+    sideEffects: filterPtcItems(ptcIn.sideEffects),
   };
 
-  const concepts = Array.isArray(obj.concepts)
-    ? obj.concepts
-        .filter((c: any) =>
-          c && typeof c.name === "string" && c.name.length > 0
-          && typeof c.briefExplainer === "string" && c.briefExplainer.length > 0
-          && typeof c.relevance === "string" && c.relevance.length > 0,
-        )
-        .map((c: any): Concept => ({
-          name: c.name,
-          briefExplainer: c.briefExplainer,
-          relevance: c.relevance,
-        }))
-    : [];
+  const conceptsRaw = Array.isArray(obj.concepts) ? obj.concepts : [];
+  const concepts: Concept[] = [];
+  const seen = new Set<string>();
+  for (const c of conceptsRaw) {
+    if (!c || typeof (c as any).name !== "string" || (c as any).name.length === 0) continue;
+    if (typeof (c as any).briefExplainer !== "string" || (c as any).briefExplainer.length === 0) continue;
+    if (typeof (c as any).relevance !== "string" || (c as any).relevance.length === 0) continue;
+    const key = (c as any).name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    concepts.push({
+      name: (c as any).name,
+      briefExplainer: (c as any).briefExplainer,
+      relevance: (c as any).relevance,
+    });
+  }
 
   return { summary: obj.summary, pointsToConsider, concepts };
 }
 
-function arrayOfStrings(x: unknown): string[] {
-  return Array.isArray(x) ? x.filter((s): s is string => typeof s === "string" && s.length > 0) : [];
+function filterPtcItems(x: unknown): string[] {
+  if (!Array.isArray(x)) return [];
+  return x.filter(
+    (s): s is string =>
+      typeof s === "string"
+      && s.length >= MIN_PTC_ITEM_LEN
+      && !GENERIC_PTC_RE.test(s.trim()),
+  );
 }
