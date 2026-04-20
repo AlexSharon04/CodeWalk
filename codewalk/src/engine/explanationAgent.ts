@@ -1,12 +1,51 @@
 import * as vscode from "vscode";
 import type { Explanation, Segment, Concept } from "../types";
-import type { LLMAdapter } from "../llm/adapter";
-import { CancelledError, MalformedResponseError } from "../llm/adapter";
+import type { LLMAdapter, ChatMessage } from "../llm/adapter";
+import { CancelledError, MalformedResponseError, StreamIdleTimeoutError } from "../llm/adapter";
 import { loadPrompt } from "../prompts/loader";
 
 export const EXPLANATION_PROMPT_VERSION = "v1";
 export const DEFAULT_MAX_SEGMENT_LINES = 400;
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 60_000;
+
+const SUMMARY_RE = /"summary"\s*:\s*"((?:[^"\\]|\\.)*)/;
+
+export function extractPartialSummary(buffer: string): string | undefined {
+  const match = SUMMARY_RE.exec(buffer);
+  if (!match) return undefined;
+  try {
+    return JSON.parse(`"${match[1]}"`);
+  } catch {
+    return undefined;
+  }
+}
+
+async function* streamWithIdleTimeout(
+  iter: AsyncIterable<string>,
+  idleTimeoutMs: number,
+  _signal: AbortSignal,
+): AsyncGenerator<string> {
+  const iterator = iter[Symbol.asyncIterator]();
+  while (true) {
+    let timeoutId: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      if (idleTimeoutMs > 0) {
+        timeoutId = setTimeout(() => reject(new Error("__idle__")), idleTimeoutMs);
+      }
+    });
+    try {
+      const { value, done } = await Promise.race([iterator.next(), timeoutPromise]);
+      if (done) return;
+      if (value === undefined) return;
+      yield value;
+    } catch (err) {
+      if ((err as Error).message === "__idle__") throw err;
+      throw err;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+}
 
 export type ExplanationLogger = (message: string) => void;
 
@@ -99,6 +138,8 @@ export async function explain(
 
   const { system: baseSystem, user } = splitPrompt(prompt);
 
+  const idleTimeoutMs = deps.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+
   let firstRaw: string | undefined;
   let firstReason: string | undefined;
   const useJsonSchema = deps.structuredOutputMode === "json_schema";
@@ -110,13 +151,48 @@ export async function explain(
       ? baseSystem
       : `${baseSystem}\n\nCRITICAL: your previous response failed validation: ${firstReason ?? "unknown"}. Respond with ONLY the raw JSON object matching the schema. No preamble, no Markdown fence.`;
 
-    const raw = await deps.adapter.complete(
-      [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      { responseFormat: useJsonSchema ? "json_object" : "json_object" },
-    );
+    const messages: ChatMessage[] = [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ];
+
+    let raw: string;
+    if (attempt === 0 && deps.onPartial) {
+      const ac = new AbortController();
+      const tokenSub = deps.token?.onCancellationRequested(() => ac.abort());
+      let buffer = "";
+      let lastEmittedLength = 0;
+      try {
+        const stream = deps.adapter.completeStream(messages, {
+          responseFormat: useJsonSchema ? "json_object" : "json_object",
+          signal: ac.signal,
+          idleTimeoutMs,
+        });
+        for await (const chunk of streamWithIdleTimeout(stream, idleTimeoutMs, ac.signal)) {
+          buffer += chunk;
+          const partial = extractPartialSummary(buffer);
+          if (partial !== undefined && partial.length > lastEmittedLength) {
+            deps.onPartial({ summary: partial });
+            lastEmittedLength = partial.length;
+          }
+        }
+        raw = buffer;
+      } catch (err) {
+        if (tokenSub) tokenSub.dispose();
+        if (err instanceof CancelledError) throw err;
+        if ((err as Error).message === "__idle__" || err instanceof StreamIdleTimeoutError) {
+          throw new ExplanationStreamError(segment.id, buffer.length, "provider-terminated");
+        }
+        throw new ExplanationStreamError(segment.id, buffer.length, "network");
+      } finally {
+        if (tokenSub) tokenSub.dispose();
+      }
+    } else {
+      raw = await deps.adapter.complete(
+        messages,
+        { responseFormat: useJsonSchema ? "json_object" : "json_object" },
+      );
+    }
 
     try {
       const validated = validateResponse(raw, segment);

@@ -321,3 +321,79 @@ suite("explain() — retry with threaded reason", () => {
     );
   });
 });
+
+function streamingAdapter(chunks: string[]): LLMAdapter {
+  return {
+    async complete() { throw new Error("streamingAdapter only implements completeStream"); },
+    async *completeStream() { for (const c of chunks) yield c; },
+  };
+}
+
+suite("explain() — streaming", () => {
+  test("onPartial fires with partial summary as tokens arrive", async () => {
+    const seg = fakeSegment();
+    // Split the valid response into 3 chunks, first cutting mid-summary.
+    const whole = VALID_RESPONSE;
+    const sliceAt = whole.indexOf(", ") + 2;  // mid-summary
+    const chunks = [whole.slice(0, sliceAt), whole.slice(sliceAt, sliceAt + 40), whole.slice(sliceAt + 40)];
+    const adapter = streamingAdapter(chunks);
+    const partials: Array<{ summary?: string }> = [];
+    await explain(seg, "", {
+      adapter,
+      promptsDir: PROMPTS_DIR,
+      onPartial: p => partials.push({ ...p }),
+    });
+    // At least one onPartial with a non-empty summary prefix.
+    const summaries = partials.map(p => p.summary ?? "");
+    assert.ok(summaries.some(s => s.length > 0), "expected at least one partial with summary");
+    // Summaries should be monotonically-growing prefixes.
+    for (let i = 1; i < summaries.length; i++) {
+      if (summaries[i]!.length > 0 && summaries[i - 1]!.length > 0) {
+        assert.ok(summaries[i]!.startsWith(summaries[i - 1]!), "summary stream should grow monotonically");
+      }
+    }
+  });
+
+  test("onPartial does not fire with invalid partial (broken escape sequence)", async () => {
+    const seg = fakeSegment();
+    const chunks = [`{"summary": "hello \\`, `u00ff world", ...`];  // backslash-u split across chunks
+    const adapter: LLMAdapter = {
+      async complete() { return VALID_RESPONSE; },  // fallback for the retry path
+      async *completeStream() { for (const c of chunks) yield c; },
+    };
+    const partials: Array<{ summary?: string }> = [];
+    // We expect this to ultimately fail validation (the streamed buffer isn't complete JSON),
+    // but onPartial must not have fired with a broken partial.
+    try {
+      await explain(seg, "", {
+        adapter,
+        promptsDir: PROMPTS_DIR,
+        onPartial: p => partials.push({ ...p }),
+      });
+    } catch { /* expected */ }
+    for (const p of partials) {
+      if (p.summary !== undefined) assert.ok(!p.summary.endsWith("\\"), "partial summary must not end with a dangling escape");
+    }
+  });
+
+  test("throws ExplanationStreamError when underlying stream hits idle timeout", async () => {
+    const seg = fakeSegment();
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("not used"); },
+      async *completeStream() {
+        yield `{"summary": "start`;
+        // Never yield another chunk. The agent's idleTimeoutMs should abort.
+        await new Promise(() => { /* hang */ });
+      },
+    };
+    await assert.rejects(
+      () => explain(seg, "", {
+        adapter,
+        promptsDir: PROMPTS_DIR,
+        onPartial: () => {},
+        streamIdleTimeoutMs: 80,
+      }),
+      (err: Error) => err instanceof ExplanationStreamError && err.cause === "provider-terminated",
+    );
+  });
+});
