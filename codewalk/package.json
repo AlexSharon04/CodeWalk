@@ -7,11 +7,15 @@
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other", "Education"],
   "main": "./dist/extension.js",
-  "activationEvents": ["onCommand:codewalk.startWalkthrough"],
+  "activationEvents": [
+    "onCommand:codewalk.startWalkthrough",
+    "onCommand:codewalk.resetApiKey"
+  ],
   "contributes": {
     "commands": [
       { "command": "codewalk.startWalkthrough", "title": "Start CodeWalk", "icon": "$(book)" },
-      { "command": "codewalk.expandBlock", "title": "Expand Block" }
+      { "command": "codewalk.expandBlock", "title": "Expand Block" },
+      { "command": "codewalk.resetApiKey", "title": "CodeWalk: Reset API Key" }
     ],
     "configuration": {
       "title": "CodeWalk",

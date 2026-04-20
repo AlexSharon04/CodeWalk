@@ -69,7 +69,7 @@ export async function segment(
   throwIfCancelled(deps.token);
 
   const numberedCode = numberLines(document.getText());
-  const systemPrompt = loadPrompt(
+  const fullPrompt = loadPrompt(
     "segmentation",
     {
       language: document.languageId,
@@ -78,8 +78,12 @@ export async function segment(
     },
     deps.promptsDir,
   );
+  const { system: systemPrompt, user: userPrompt } = splitSystemUser(fullPrompt);
 
-  const baseMessages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
+  const baseMessages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
 
   let firstRaw: string | undefined;
   let firstFailureReason: string | undefined;
@@ -104,7 +108,10 @@ export async function segment(
     const retrySystem =
       systemPrompt +
       `\n\nCRITICAL: your previous response failed validation: ${firstFailureReason}. Respond with ONLY the raw JSON object matching the schema — no markdown fences, no commentary, no explanation. Begin with { and end with }.`;
-    const retryMessages: ChatMessage[] = [{ role: "system", content: retrySystem }];
+    const retryMessages: ChatMessage[] = [
+      { role: "system", content: retrySystem },
+      { role: "user", content: userPrompt },
+    ];
 
     let secondRaw: string | undefined;
     try {
@@ -137,6 +144,23 @@ function throwIfCancelled(token?: vscode.CancellationToken): void {
 
 function numberLines(text: string): string {
   return text.split("\n").map((line, i) => `${i + 1}: ${line}`).join("\n");
+}
+
+// Split the substituted prompt into system (instructions) and user (the actual input) halves.
+// Anthropic's OAI-compat endpoint rejects requests with only a system message; splitting
+// also matches standard chat-template convention (rules in system, ask in user).
+function splitSystemUser(prompt: string): { system: string; user: string } {
+  const marker = "## Input";
+  const idx = prompt.indexOf(marker);
+  if (idx === -1) {
+    throw new Error(
+      `Segmentation prompt missing "${marker}" section header — cannot split into system/user messages.`,
+    );
+  }
+  return {
+    system: prompt.slice(0, idx).trim(),
+    user: prompt.slice(idx + marker.length).trim(),
+  };
 }
 
 function parseAndValidate(raw: string, document: vscode.TextDocument): ParseResult {

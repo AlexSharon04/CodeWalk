@@ -1,11 +1,11 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-04-17
-**Current phase:** Phase 1 — Core Loop — **hardened, awaiting manual verification**
-**Current step:** All 17 plan tasks landed plus ADR-004 (first-run wizard) and ADR-005 (LLM-call validation contract + cancellation + SecretStorage + hash ids). Manual smoke test pending before Phase 2 brainstorm.
+**Last updated:** 2026-04-20
+**Current phase:** Phase 1 — Core Loop — **cloud path verified end-to-end; ready for Phase 2 brainstorm**
+**Current step:** All 17 plan tasks landed plus ADR-004, ADR-005, and 2026-04-20 smoke-test fixes (backend-aware `structuredOutputMode`, system/user prompt split, `codewalk.resetApiKey` command). Anthropic + Groq paths both verified interactively; Ollama path still untested by design (dev hardware too slow).
 
 ## Phase status
-- [x] Phase 1 — Core Loop (segmenter + CodeLens + block highlights + first-run wizard + pre-Phase-2 hardening) — **code complete and hardened 2026-04-17; manual verification pending**
+- [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
 - [ ] Phase 2 — Level 1 Explanations (Comment Controller)
 - [ ] Phase 3 — Navigation & File Queue
 - [ ] Phase 4 — Level 2 & Polish
@@ -30,14 +30,14 @@ Run through both backend paths. Both must pass on the current commit.
 - [ ] CodeWalk Output channel shows `[success] N segments for …`.
 - [ ] Clicking a CodeLens is a no-op (expected for Phase 1).
 
-### Cloud-API-key path
-- [ ] Delete any stored key from SecretStorage (e.g. run `CodeWalk` with a fresh profile, or manually clear via an ephemeral command). Setting `codewalk.apiKey` in `settings.json` NO LONGER configures the key — SecretStorage is the source of truth.
-- [ ] Set `codewalk.backend = "groq"` (or another cloud preset).
-- [ ] Run `CodeWalk: Start Walkthrough` → wizard fires.
-- [ ] Pick a preset, paste a real API key → walkthrough proceeds without re-running the command.
+### Cloud-API-key path — **verified 2026-04-20 against Anthropic + Groq**
+- [x] Delete any stored key from SecretStorage — use `CodeWalk: Reset API Key` (new 2026-04-20).
+- [x] Set `codewalk.backend = "groq"` (or another cloud preset).
+- [x] Run `CodeWalk: Start Walkthrough` → wizard fires.
+- [x] Pick a preset, paste a real API key → walkthrough proceeds without re-running the command.
 - [ ] Cancelling the wizard cleanly aborts (no error toast, no partial state).
-- [ ] Restart window → wizard does NOT fire (key persisted in the OS keychain).
-- [ ] Confirm the key does NOT appear in `settings.json` after the wizard completes.
+- [x] Restart window → wizard does NOT fire (key persisted in the OS keychain).
+- [x] Confirm the key does NOT appear in `settings.json` after the wizard completes.
 
 ### Legacy-key migration (one-shot, runs on activation)
 - [ ] Pre-seed `settings.json` with `"codewalk.apiKey": "sk-test-legacy"` (any value).
@@ -76,6 +76,11 @@ None for Phase 1 closure. Phase 2 spec will open the following:
 - Visual signal for "only one panel open at a time".
 
 ## Recent decisions
+- **2026-04-20** — **Phase 1 smoke-test findings.** Interactive testing against real providers surfaced three bugs that unit tests with mocked fetches couldn't catch: (1) Groq `llama-3.3-70b-versatile` rejects `response_format: {type: "json_schema"}`; (2) Anthropic's OAI-compat endpoint at `https://api.anthropic.com/v1/chat/completions` rejects `{type: "json_object"}` and requires `json_schema`; (3) Anthropic's OAI-compat also rejects requests with only a `system` role message, demanding at least one `user` message. Each provider is "OpenAI-compatible" for different subsets of the spec.
+- **2026-04-20** — **`StructuredOutputMode` per preset.** Added `structuredOutputMode: "json_object" | "json_schema"` to `PresetConfig`, threaded through `ResolvedBackend` and `AdapterConfig`. Anthropic → `json_schema`, everyone else → `json_object`. Kept `SEGMENT_JSON_SCHEMA` hardcoded in the adapter for now; proper per-call `jsonSchema` option on `CompleteOptions` deferred to Phase 2 when the explanation agent introduces a second schema. User chose pragmatic ship-working over speculative refactor (would have been -50/+5 lines to drop `response_format` entirely).
+- **2026-04-20** — **Prompt role split.** `segmentation.md` is loaded as a single file but split on the `## Input` marker at runtime into `{role: "system", content: rules}` + `{role: "user", content: language/filename/code}`. Anthropic requires a user message; other providers tolerate the split. Retry path preserves the user half unchanged, appends a CRITICAL suffix only to the system half.
+- **2026-04-20** — **`codewalk.resetApiKey` command.** Command-palette-accessible way to clear SecretStorage via `setApiKey(context, "")`. Keeps extension users out of Windows Credential Manager / macOS Keychain hunts. Permanent — useful for key rotation, provider switching, debugging.
+- **2026-04-20** — **Known follow-up: `NetworkError` logs the full URL including baseUrl in adapter error messages.** If a user mis-pastes a secret into `codewalk.baseUrl`, it will leak into the Output channel (one user did exactly this during smoke testing). Mitigate in Phase 2: redact URL fragments that look like API keys (high-entropy strings, `sk-*`, `gsk_*` prefixes) before appending to `NetworkError` messages.
 - **2026-04-17** — MVP decomposed into four per-phase spec → plan → implement cycles. Each phase independently demo-able.
 - **2026-04-17** — Persistent memory lives in `CLAUDE.md` + `docs/`, not `.entire/` (which is session telemetry).
 - **2026-04-17** — **ADR-001** — Unified `OpenAICompatibleAdapter` replaces the four-adapter design from design-doc §3.5.
@@ -105,8 +110,8 @@ These pieces are already in place and Phase 2 can build on them without refactor
 - API keys are in `context.secrets` — any new code reading keys calls `getApiKey(context)`, never `configuration.get("apiKey")`.
 
 ## What's next
-1. **User manually verifies Phase 1** using the checklist above.
-2. On pass → commit "phase1/complete: manual verification passed", tag `phase1-complete`.
-3. Begin Phase 2 brainstorm (use the `superpowers:brainstorming` skill) — open questions listed above are the starting points.
-4. Write Phase 2 spec at `docs/superpowers/specs/YYYY-MM-DD-codewalk-phase2-explanations.md`.
-5. On fail → file issues, fix, re-verify, then proceed to step 2.
+1. **Optional before Phase 2:** knock out the remaining ⚠️ items on the manual verification checklist — cancellation, bad-key path, file-too-large, `showBlockHighlights` toggle, hash-id stability, prompt-edit reload. None are blockers; all would take ~30s each.
+2. **Begin Phase 2 brainstorm** (use the `superpowers:brainstorming` skill) — open questions listed above are the starting points.
+3. Write Phase 2 spec at `docs/superpowers/specs/2026-04-XX-codewalk-phase2-explanations.md`.
+4. Write Phase 2 plan at `docs/superpowers/plans/2026-04-XX-codewalk-phase2-explanations.md`.
+5. Execute Phase 2 plan step by step, updating this file at each numbered step.

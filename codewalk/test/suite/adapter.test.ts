@@ -83,7 +83,49 @@ suite("OpenAICompatibleAdapter.complete", () => {
     assert.strictEqual(headers["Authorization"], undefined);
   });
 
-  test("includes response_format when requested", async () => {
+  test("uses json_object when structuredOutputMode is json_object (default)", async () => {
+    let capturedBody: string | undefined;
+    const fetchFn: FetchFn = async (_url, init) => {
+      capturedBody = init?.body as string;
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+        text: async () => "",
+        headers: { get: () => null },
+      } as unknown as Response;
+    };
+    const a = new OpenAICompatibleAdapter({ ...CFG, structuredOutputMode: "json_object" }, fetchFn);
+    await a.complete([{ role: "user", content: "hi" }], { responseFormat: "json_object" });
+    const parsed = JSON.parse(capturedBody!);
+    assert.deepStrictEqual(parsed.response_format, { type: "json_object" });
+  });
+
+  test("uses json_schema when structuredOutputMode is json_schema", async () => {
+    let capturedBody: string | undefined;
+    const fetchFn: FetchFn = async (_url, init) => {
+      capturedBody = init?.body as string;
+      return {
+        status: 200,
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+        text: async () => "",
+        headers: { get: () => null },
+      } as unknown as Response;
+    };
+    const a = new OpenAICompatibleAdapter({ ...CFG, structuredOutputMode: "json_schema" }, fetchFn);
+    await a.complete([{ role: "user", content: "hi" }], { responseFormat: "json_object" });
+    const parsed = JSON.parse(capturedBody!);
+    assert.strictEqual(parsed.response_format.type, "json_schema");
+    assert.strictEqual(parsed.response_format.json_schema.name, "codewalk_segments");
+    assert.strictEqual(parsed.response_format.json_schema.strict, true);
+    assert.deepStrictEqual(
+      parsed.response_format.json_schema.schema.required,
+      ["segments"],
+    );
+  });
+
+  test("defaults to json_object when structuredOutputMode unset", async () => {
     let capturedBody: string | undefined;
     const fetchFn: FetchFn = async (_url, init) => {
       capturedBody = init?.body as string;

@@ -67,6 +67,7 @@ export function registerStartWalkthrough(
       baseUrl: finalResolved.baseUrl,
       apiKey: finalResolved.apiKey,
       model: finalResolved.model,
+      structuredOutputMode: finalResolved.structuredOutputMode,
     });
 
     await vscode.window.withProgress(

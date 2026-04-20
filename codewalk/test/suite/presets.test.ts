@@ -46,6 +46,25 @@ suite("presets.resolveBackend", () => {
       const r = resolveBackend({ backend: b, apiKey: "k", model: "", baseUrl: "" });
       assert.ok(r.baseUrl.length > 0, `${b} must have baseUrl`);
       assert.ok(r.model.length > 0, `${b} must have default model`);
+      assert.ok(
+        r.structuredOutputMode === "json_object" || r.structuredOutputMode === "json_schema",
+        `${b} must declare structuredOutputMode`,
+      );
     }
+  });
+
+  test("anthropic-oai uses json_schema (required by its OAI-compat shim)", () => {
+    const r = resolveBackend({ backend: "anthropic-oai", apiKey: "k", model: "", baseUrl: "" });
+    assert.strictEqual(r.structuredOutputMode, "json_schema");
+  });
+
+  test("groq uses json_object (default llama-3.3-70b rejects json_schema)", () => {
+    const r = resolveBackend({ backend: "groq", apiKey: "k", model: "", baseUrl: "" });
+    assert.strictEqual(r.structuredOutputMode, "json_object");
+  });
+
+  test("custom defaults to json_object", () => {
+    const r = resolveBackend({ backend: "custom", apiKey: "k", model: "m", baseUrl: "https://x.example/v1" });
+    assert.strictEqual(r.structuredOutputMode, "json_object");
   });
 });

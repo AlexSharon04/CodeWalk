@@ -3,7 +3,7 @@ import { SegmentStore } from "./engine/segmentStore";
 import { CodeWalkLensProvider } from "./providers/codeLensProvider";
 import { BlockHighlighter } from "./editor/highlights";
 import { registerStartWalkthrough } from "./commands/startWalkthrough";
-import { migrateLegacyApiKey } from "./utils/secrets";
+import { migrateLegacyApiKey, setApiKey } from "./utils/secrets";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("CodeWalk");
@@ -31,6 +31,17 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
+  const resetApiKeyCommand = vscode.commands.registerCommand(
+    "codewalk.resetApiKey",
+    async () => {
+      await setApiKey(context, "");
+      output.appendLine("[secrets] api key cleared; next Start CodeWalk will re-run the wizard");
+      vscode.window.showInformationMessage(
+        "CodeWalk API key cleared. Run Start CodeWalk to re-enter it.",
+      );
+    },
+  );
+
   const closeHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
     store.clear(doc.uri);
   });
@@ -43,6 +54,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lensRegistration,
     startCommand,
     expandBlockCommand,
+    resetApiKeyCommand,
     closeHandler,
   );
 
