@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { suite, test } from "mocha";
 import { loadPrompt } from "../../src/prompts/loader";
 import { explain, DEFAULT_MAX_SEGMENT_LINES, EXPLANATION_PROMPT_VERSION, SegmentTooLargeError, ExplanationStreamError } from "../../src/engine/explanationAgent";
-import { MalformedResponseError } from "../../src/llm/adapter";
+import { MalformedResponseError, AuthError, RateLimitError } from "../../src/llm/adapter";
 import type { LLMAdapter } from "../../src/llm/adapter";
 import type { Segment } from "../../src/types";
 
@@ -394,6 +394,42 @@ suite("explain() — streaming", () => {
         streamIdleTimeoutMs: 80,
       }),
       (err: Error) => err instanceof ExplanationStreamError && err.cause === "provider-terminated",
+    );
+  });
+
+  test("propagates AuthError from the adapter without wrapping", async () => {
+    const seg = fakeSegment();
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("not used"); },
+      async *completeStream() {
+        throw new AuthError("API key rejected");
+      },
+    };
+    await assert.rejects(
+      () => explain(seg, "", {
+        adapter,
+        promptsDir: PROMPTS_DIR,
+        onPartial: () => {},
+      }),
+      (err: Error) => err instanceof AuthError,
+    );
+  });
+
+  test("propagates RateLimitError from the adapter without wrapping", async () => {
+    const seg = fakeSegment();
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("not used"); },
+      async *completeStream() {
+        throw new RateLimitError("rate limited", 30);
+      },
+    };
+    await assert.rejects(
+      () => explain(seg, "", {
+        adapter,
+        promptsDir: PROMPTS_DIR,
+        onPartial: () => {},
+      }),
+      (err: Error) => err instanceof RateLimitError,
     );
   });
 });

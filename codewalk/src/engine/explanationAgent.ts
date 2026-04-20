@@ -1,7 +1,13 @@
 import * as vscode from "vscode";
 import type { Explanation, Segment, Concept } from "../types";
 import type { LLMAdapter, ChatMessage } from "../llm/adapter";
-import { CancelledError, MalformedResponseError, StreamIdleTimeoutError } from "../llm/adapter";
+import {
+  CancelledError,
+  MalformedResponseError,
+  AuthError,
+  RateLimitError,
+  StreamIdleTimeoutError,
+} from "../llm/adapter";
 import { loadPrompt } from "../prompts/loader";
 
 export const EXPLANATION_PROMPT_VERSION = "v1";
@@ -180,6 +186,7 @@ export async function explain(
       } catch (err) {
         if (tokenSub) tokenSub.dispose();
         if (err instanceof CancelledError) throw err;
+        if (err instanceof AuthError || err instanceof RateLimitError) throw err;
         if ((err as Error).message === "__idle__" || err instanceof StreamIdleTimeoutError) {
           throw new ExplanationStreamError(segment.id, buffer.length, "provider-terminated");
         }
