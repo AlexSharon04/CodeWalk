@@ -241,6 +241,31 @@ suite("explain() — per-item validation", () => {
     assert.strictEqual(result.pointsToConsider.assumptions.length, 0);
     assert.strictEqual(result.pointsToConsider.dangers.length, 1);
   });
+
+  test("drops generic PTC items that use smart apostrophes (U+2019)", async () => {
+    const seg = fakeSegment();
+    const smartQuoteResponse = JSON.stringify({
+      summary: "This is a valid-looking summary paragraph that says enough to pass the length check.",
+      pointsToConsider: {
+        // First item: smart-apostrophe version of "don't forget" — must be dropped.
+        // Second item: specific; must survive.
+        assumptions: [
+          "Don\u2019t forget to validate the inputs before saving.",
+          "Assumes that `session.user` is populated before this block executes.",
+        ],
+        dangers: [],
+        sideEffects: [],
+      },
+      concepts: [],
+    });
+    const adapter = stubAdapter([smartQuoteResponse]);
+    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(result.pointsToConsider.assumptions.length, 1);
+    assert.ok(
+      result.pointsToConsider.assumptions[0]!.includes("session.user"),
+      "the specific assumption item should survive; the smart-quote generic should be dropped",
+    );
+  });
 });
 
 suite("explain() — cross-item validation", () => {

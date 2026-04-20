@@ -64,7 +64,7 @@ interface RawExplanation {
 // Task 5 — validation and retry.
 export class ValidationFailure extends Error {}
 
-const GENERIC_PTC_RE = /^(be careful|make sure|consider|note that|avoid|watch out|don't forget)\b/i;
+const GENERIC_PTC_RE = /^(be careful|make sure|consider|note that|avoid|watch out|don[\u0027\u2019]t forget)\b/i;
 const MIN_SUMMARY_LEN = 20;
 const MIN_PTC_ITEM_LEN = 15;
 
