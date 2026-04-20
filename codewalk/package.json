@@ -9,13 +9,15 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCommand:codewalk.startWalkthrough",
-    "onCommand:codewalk.resetApiKey"
+    "onCommand:codewalk.resetApiKey",
+    "onCommand:codewalk.resetExplanationCache"
   ],
   "contributes": {
     "commands": [
       { "command": "codewalk.startWalkthrough", "title": "Start CodeWalk", "icon": "$(book)" },
       { "command": "codewalk.expandBlock", "title": "Expand Block" },
-      { "command": "codewalk.resetApiKey", "title": "CodeWalk: Reset API Key" }
+      { "command": "codewalk.resetApiKey", "title": "CodeWalk: Reset API Key" },
+      { "command": "codewalk.resetExplanationCache", "title": "CodeWalk: Reset Explanation Cache" }
     ],
     "configuration": {
       "title": "CodeWalk",
@@ -40,6 +42,21 @@
           "type": "boolean",
           "default": true,
           "description": "Show background color tints for code blocks during a walkthrough."
+        },
+        "codewalk.explanation.prefetchOnSegmentation": {
+          "type": "boolean",
+          "default": false,
+          "description": "If enabled, explanations for every segment are fetched in the background immediately after segmentation, so later CodeLens clicks are instant. Costs extra LLM calls for blocks you may never open."
+        },
+        "codewalk.explanation.streamIdleTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "description": "Abort an explanation if no tokens arrive from the backend for this many milliseconds."
+        },
+        "codewalk.explanation.maxSegmentLines": {
+          "type": "number",
+          "default": 400,
+          "description": "Skip explanation for blocks longer than this many lines."
         }
       }
     }
