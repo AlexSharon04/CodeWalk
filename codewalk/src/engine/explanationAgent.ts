@@ -23,6 +23,32 @@ export interface ExplanationDeps {
   readonly structuredOutputMode?: "json_object" | "json_schema";
 }
 
+export class SegmentTooLargeError extends Error {
+  constructor(
+    public readonly segmentId: string,
+    public readonly lineCount: number,
+    public readonly maxLines: number,
+  ) {
+    super(
+      `Segment ${segmentId} has ${lineCount} lines; CodeWalk currently supports blocks up to ${maxLines} lines.`,
+    );
+    this.name = "SegmentTooLargeError";
+  }
+}
+
+export class ExplanationStreamError extends Error {
+  constructor(
+    public readonly segmentId: string,
+    public readonly partialBytes: number,
+    public readonly cause: "network" | "provider-terminated" | "parse-never-ready",
+  ) {
+    super(
+      `Explanation stream for ${segmentId} ended prematurely (${partialBytes} bytes received, cause: ${cause}).`,
+    );
+    this.name = "ExplanationStreamError";
+  }
+}
+
 export async function explain(
   _segment: Segment,
   _fileContext: string,
