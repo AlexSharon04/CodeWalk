@@ -1,8 +1,8 @@
 # CodeWalk — Project State
 
 **Last updated:** 2026-04-20
-**Current phase:** Phase 1 — Core Loop — **cloud path verified end-to-end; ready for Phase 2 brainstorm**
-**Current step:** All 17 plan tasks landed plus ADR-004, ADR-005, and 2026-04-20 smoke-test fixes (backend-aware `structuredOutputMode`, system/user prompt split, `codewalk.resetApiKey` command). Anthropic + Groq paths both verified interactively; Ollama path still untested by design (dev hardware too slow).
+**Current phase:** Phase 2 — Level 1 Explanations — **spec drafted, awaiting user review before plan**
+**Current step:** Phase 1 is code-complete and cloud-path-verified; Phase 2 brainstorm completed and spec committed at `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md`. Post-MVP vision captured at `docs/POST_MVP_VISION.md` (Phase 5 — Cross-file Intelligence). Next: user reviews spec, then the `writing-plans` skill produces `docs/superpowers/plans/2026-04-20-codewalk-phase2-explanations.md`.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
@@ -13,6 +13,8 @@
 ## Active artifacts
 - Phase 1 spec: `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md` *(approved 2026-04-17)*
 - Phase 1 plan: `docs/superpowers/plans/2026-04-17-codewalk-phase1-core-loop.md` *(17 tasks, all complete)*
+- **Phase 2 spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md` *(draft — awaiting user approval 2026-04-20)***
+- Post-MVP vision: `docs/POST_MVP_VISION.md` *(Phase 5 — Cross-file Intelligence — parked until Phase 4 ships)*
 - ADRs: `docs/ARCHITECTURE_DECISIONS.md` *(ADR-001, ADR-002, ADR-003, ADR-004, ADR-005 accepted)*
 - README with user testing instructions: `codewalk/README.md`
 
@@ -76,6 +78,8 @@ None for Phase 1 closure. Phase 2 spec will open the following:
 - Visual signal for "only one panel open at a time".
 
 ## Recent decisions
+- **2026-04-20** — **Phase 2 brainstorm completed.** Spec drafted at `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md`. Key calls: (1) Full Level 1 scope per design-doc §4.1 — summary + Points to Consider (assumptions, dangers, sideEffects) + tagged Concepts — in one agent call, one schema. (2) Cache keyed `${preset}:${promptVersion}:${segmentId}` and persisted in `ExtensionContext.globalState` — cross-project sharing intentional; content-hash segment ids (ADR-005 addendum) give natural invalidation. (3) Streaming always-on for the `summary` field via a new streaming path on `OpenAICompatibleAdapter`; lists (PTC, concepts) render atomically at stream end. (4) Prefetch opt-in via `codewalk.explanation.prefetchOnSegmentation` (default `false`), session-wide disable on `AuthError`, concurrency 2. (5) `CommentController` with `<details>` Concepts block, re-click-to-toggle, no auto-expand of first block. (6) Stream-idle timeout 60s. (7) One Phase 5 seam preserved: `ExplanationDeps.additionalContext?: string` — always `undefined` in Phase 2.
+- **2026-04-20** — **Post-MVP vision doc created.** New `docs/POST_MVP_VISION.md` sibling to `IMPLEMENTATION_PLAN.md`, capturing Phase 5 (Cross-file Intelligence) design in three layers: static dependency graph (tree-sitter, zero LLM cost), symbol-context accumulator (working memory grows as user walks), abnormality detection (prompt-level rule activated when ≥2 sightings exist). Walk-trail + jump-to-definition UX sketched. Rationale: user-raised idea during brainstorm; too large for Phase 2 scope; worth preserving because it's the first feature in the roadmap that's unambiguously agentic rather than LLM-wrapper.
 - **2026-04-20** — **Phase 1 smoke-test findings.** Interactive testing against real providers surfaced three bugs that unit tests with mocked fetches couldn't catch: (1) Groq `llama-3.3-70b-versatile` rejects `response_format: {type: "json_schema"}`; (2) Anthropic's OAI-compat endpoint at `https://api.anthropic.com/v1/chat/completions` rejects `{type: "json_object"}` and requires `json_schema`; (3) Anthropic's OAI-compat also rejects requests with only a `system` role message, demanding at least one `user` message. Each provider is "OpenAI-compatible" for different subsets of the spec.
 - **2026-04-20** — **`StructuredOutputMode` per preset.** Added `structuredOutputMode: "json_object" | "json_schema"` to `PresetConfig`, threaded through `ResolvedBackend` and `AdapterConfig`. Anthropic → `json_schema`, everyone else → `json_object`. Kept `SEGMENT_JSON_SCHEMA` hardcoded in the adapter for now; proper per-call `jsonSchema` option on `CompleteOptions` deferred to Phase 2 when the explanation agent introduces a second schema. User chose pragmatic ship-working over speculative refactor (would have been -50/+5 lines to drop `response_format` entirely).
 - **2026-04-20** — **Prompt role split.** `segmentation.md` is loaded as a single file but split on the `## Input` marker at runtime into `{role: "system", content: rules}` + `{role: "user", content: language/filename/code}`. Anthropic requires a user message; other providers tolerate the split. Retry path preserves the user half unchanged, appends a CRITICAL suffix only to the system half.
