@@ -1,19 +1,20 @@
 # CodeWalk — Project State
 
 **Last updated:** 2026-04-20
-**Current phase:** Phase 2 — Level 1 Explanations — **spec drafted, awaiting user review before plan**
-**Current step:** Phase 1 is code-complete and cloud-path-verified; Phase 2 brainstorm completed and spec committed at `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md`. Post-MVP vision captured at `docs/POST_MVP_VISION.md` (Phase 5 — Cross-file Intelligence). Next: user reviews spec, then the `writing-plans` skill produces `docs/superpowers/plans/2026-04-20-codewalk-phase2-explanations.md`.
+**Current phase:** Phase 2 — Level 1 Explanations — **implementation complete, manual verification in progress**
+**Current step:** All 14 plan tasks landed. Unit tests (explanationAgent, explanationStore, commentController, prefetchQueue) green. Eval harness and live integration test committed behind env vars. Manual verification checklist available in this file.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
-- [ ] Phase 2 — Level 1 Explanations (Comment Controller)
+- [x] Phase 2 — Level 1 Explanations — **code complete 2026-04-20; manual checklist pending**
 - [ ] Phase 3 — Navigation & File Queue
 - [ ] Phase 4 — Level 2 & Polish
 
 ## Active artifacts
 - Phase 1 spec: `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md` *(approved 2026-04-17)*
 - Phase 1 plan: `docs/superpowers/plans/2026-04-17-codewalk-phase1-core-loop.md` *(17 tasks, all complete)*
-- **Phase 2 spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md` *(draft — awaiting user approval 2026-04-20)***
+- **Phase 2 spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md` *(approved 2026-04-20; plan + implementation complete)***
+- Phase 2 plan: `docs/superpowers/plans/2026-04-20-codewalk-phase2-explanations.md` *(14 tasks, all complete)*
 - Post-MVP vision: `docs/POST_MVP_VISION.md` *(Phase 5 — Cross-file Intelligence — parked until Phase 4 ships)*
 - ADRs: `docs/ARCHITECTURE_DECISIONS.md` *(ADR-001, ADR-002, ADR-003, ADR-004, ADR-005 accepted)*
 - README with user testing instructions: `codewalk/README.md`
@@ -69,6 +70,58 @@ Run through both backend paths. Both must pass on the current commit.
 - [ ] Edit `codewalk/prompts/segmentation.md` (e.g., change rule 7 to say 50 chars).
 - [ ] Reload Extension Development Host (`Ctrl+R` inside the host window).
 - [ ] Re-run Start CodeWalk → new constraint visibly reflected in one-liners.
+
+## Phase 2 manual verification checklist (do before tagging `phase2-complete`)
+
+### Streaming + panel behavior
+- [ ] Open `codewalk/test/fixtures/sample.ts`. Run `CodeWalk: Start Walkthrough`.
+- [ ] Click any CodeLens. Panel opens inline below the label. Summary streams in progressively (not all at once).
+- [ ] Points to Consider renders as three sub-sections: Assumptions, Dangers, Side effects.
+- [ ] Concepts section is a `<details>` block. Collapsed by default; expanding it reveals the tagged concepts.
+
+### Single-panel invariant
+- [ ] Click block A's CodeLens — panel A opens.
+- [ ] Click block B's CodeLens — panel A disappears, panel B opens.
+- [ ] Click block B's CodeLens again — panel B disappears (toggle).
+- [ ] Switch to a different editor tab and back — the previously open panel is still open (editor focus doesn't collapse threads).
+
+### Cache persistence
+- [ ] Click any CodeLens. Wait for the explanation to finish.
+- [ ] Reload the window (`Developer: Reload Window`).
+- [ ] Run `CodeWalk: Start Walkthrough` again on the same file.
+- [ ] Click the same CodeLens — panel opens instantly (no spinner, no streaming).
+
+### Cache invalidation
+- [ ] Edit `codewalk/prompts/explanation.md` (change a rule). Bump `EXPLANATION_PROMPT_VERSION` in `src/engine/explanationAgent.ts` (e.g. `v1` → `v2`).
+- [ ] Rebuild: `cd codewalk && npm run build`.
+- [ ] Reload the window. Click the same CodeLens as before — panel re-streams (old `v1` entries dropped on construction).
+
+### Prefetch toggle
+- [ ] In Settings UI, enable `codewalk.explanation.prefetchOnSegmentation`.
+- [ ] Reload the window. Run `CodeWalk: Start Walkthrough`.
+- [ ] Output channel shows `[prefetch]` log lines for each segment.
+- [ ] Click any CodeLens — panel opens instantly (prefetched entry).
+- [ ] Disable the setting. Reload. Run walkthrough. First clicks stream normally.
+
+### Cancellation during stream
+- [ ] Click a CodeLens. While the summary is still streaming, click a different CodeLens.
+- [ ] The first panel disappears cleanly; the second begins streaming.
+- [ ] No error toast, no stack trace in the Output channel (just `[commentController]` or `[explanation] cancelled` log line).
+
+### Auth-disable prefetch
+- [ ] Deliberately set an invalid API key (`CodeWalk: Reset API Key`, re-enter an invalid value via the wizard).
+- [ ] Enable prefetch. Run `CodeWalk: Start Walkthrough`.
+- [ ] Output channel shows `[prefetch] disabled: auth failed` after the first auth failure.
+- [ ] No further `[prefetch] error` lines that session — the queue is quiet.
+
+### Reset cache command
+- [ ] Run `CodeWalk: Reset Explanation Cache` from the Command Palette.
+- [ ] An info message confirms the clear.
+- [ ] Subsequent CodeLens clicks re-stream (no cache hits).
+
+### Backend / model swap
+- [ ] Switch `codewalk.backend` from one preset to another (e.g. Groq → Anthropic or vice versa) via the wizard or settings.
+- [ ] Click a CodeLens that was previously cached on the old backend — it re-streams (preset component of the cache key differs).
 
 ## Open questions
 None for Phase 1 closure. Phase 2 spec will open the following:
