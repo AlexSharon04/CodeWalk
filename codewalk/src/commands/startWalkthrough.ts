@@ -12,6 +12,10 @@ import {
   NetworkError,
   RateLimitError,
 } from "../llm/adapter";
+import {
+  SegmentTooLargeError,
+  ExplanationStreamError,
+} from "../engine/explanationAgent";
 import { runFirstRunWizard } from "./firstRunWizard";
 
 export function registerStartWalkthrough(
@@ -108,6 +112,24 @@ function showSettingsError(message: string): void {
 function handleError(e: unknown, output: vscode.OutputChannel): void {
   if (e instanceof CancelledError) {
     output.appendLine("[cancelled] user cancelled CodeWalk analysis");
+    return;
+  }
+  if (e instanceof SegmentTooLargeError) {
+    output.appendLine(
+      `[SegmentTooLargeError] segmentId=${e.segmentId} lines=${e.lineCount}/${e.maxLines}`,
+    );
+    vscode.window.showWarningMessage(
+      `CodeWalk skipped a block that's too large to explain (${e.lineCount} / ${e.maxLines} lines).`,
+    );
+    return;
+  }
+  if (e instanceof ExplanationStreamError) {
+    output.appendLine(
+      `[ExplanationStreamError] cause=${e.cause} message=${e.message}`,
+    );
+    vscode.window.showErrorMessage(
+      "CodeWalk couldn't finish the explanation — the connection dropped. Try again.",
+    );
     return;
   }
   if (e instanceof NetworkError) {
