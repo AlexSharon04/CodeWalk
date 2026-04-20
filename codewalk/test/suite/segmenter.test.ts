@@ -19,6 +19,9 @@ class StubAdapter implements LLMAdapter {
     if (next instanceof Error) throw next;
     return next;
   }
+  async *completeStream() {
+    // Stub: segmenter does not use streaming
+  }
 }
 
 async function openDoc(text: string, language = "typescript"): Promise<vscode.TextDocument> {

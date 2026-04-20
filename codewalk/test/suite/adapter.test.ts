@@ -9,6 +9,7 @@ import {
   MalformedResponseError,
   NetworkError,
   RateLimitError,
+  StreamIdleTimeoutError,
 } from "../../src/llm/adapter";
 
 function mockFetch(response: {
@@ -195,5 +196,102 @@ suite("OpenAICompatibleAdapter.complete", () => {
       () => a.complete([{ role: "user", content: "hi" }]),
       MalformedResponseError,
     );
+  });
+});
+
+function mockStreamFetch(chunks: string[], opts?: { delayMs?: number; throws?: Error }): FetchFn {
+  return async () => {
+    if (opts?.throws) throw opts.throws;
+    const encoder = new TextEncoder();
+    let i = 0;
+    const stream = new ReadableStream({
+      async pull(controller) {
+        if (i >= chunks.length) {
+          controller.close();
+          return;
+        }
+        if (opts?.delayMs) await new Promise(r => setTimeout(r, opts.delayMs));
+        controller.enqueue(encoder.encode(chunks[i]!));
+        i++;
+      },
+    });
+    return {
+      status: 200,
+      ok: true,
+      body: stream,
+      headers: { get: () => null },
+    } as unknown as Response;
+  };
+}
+
+// SSE chunks for OpenAI-compat streaming. Each data line carries a JSON fragment with a delta.
+function sseChunk(content: string): string {
+  return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+}
+
+const SSE_DONE = "data: [DONE]\n\n";
+
+suite("OpenAICompatibleAdapter.completeStream", () => {
+  test("yields text chunks in order from SSE response", async () => {
+    const a = new OpenAICompatibleAdapter(CFG, mockStreamFetch([
+      sseChunk("Hello "),
+      sseChunk("world"),
+      SSE_DONE,
+    ]));
+    const collected: string[] = [];
+    for await (const chunk of a.completeStream([{ role: "user", content: "hi" }])) {
+      collected.push(chunk);
+    }
+    assert.deepStrictEqual(collected, ["Hello ", "world"]);
+  });
+
+  test("throws CancelledError when AbortSignal fires mid-stream", async () => {
+    const controller = new AbortController();
+    const a = new OpenAICompatibleAdapter(CFG, mockStreamFetch([
+      sseChunk("Hello "),
+      sseChunk("world"),
+      SSE_DONE,
+    ], { delayMs: 50 }));
+    const iter = a.completeStream([{ role: "user", content: "hi" }], {
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(), 25);
+    await assert.rejects(async () => {
+      for await (const _ of iter) { /* consume */ }
+    }, /cancel/i);
+  });
+
+  test("throws StreamIdleTimeoutError when no chunk arrives within idleTimeoutMs", async () => {
+    const a = new OpenAICompatibleAdapter(CFG, mockStreamFetch([
+      sseChunk("partial"),
+      // then hang for a long time before [DONE]
+    ], { delayMs: 500 }));
+    const iter = a.completeStream([{ role: "user", content: "hi" }], {
+      idleTimeoutMs: 100,
+    });
+    await assert.rejects(async () => {
+      for await (const _ of iter) { /* consume */ }
+    }, StreamIdleTimeoutError);
+  });
+
+  test("propagates NetworkError when fetch throws", async () => {
+    const a = new OpenAICompatibleAdapter(CFG, mockStreamFetch([], { throws: new Error("boom") }));
+    await assert.rejects(async () => {
+      for await (const _ of a.completeStream([{ role: "user", content: "hi" }])) { /* consume */ }
+    }, NetworkError);
+  });
+
+  test("propagates AuthError on HTTP 401", async () => {
+    const fetchFn: FetchFn = async () => ({
+      status: 401,
+      ok: false,
+      json: async () => ({ error: "unauthorized" }),
+      text: async () => "unauthorized",
+      headers: { get: () => null },
+    } as unknown as Response);
+    const a = new OpenAICompatibleAdapter(CFG, fetchFn);
+    await assert.rejects(async () => {
+      for await (const _ of a.completeStream([{ role: "user", content: "hi" }])) { /* consume */ }
+    }, AuthError);
   });
 });
