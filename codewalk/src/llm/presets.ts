@@ -18,7 +18,7 @@ export interface PresetConfig {
   structuredOutputMode: StructuredOutputMode;
 }
 
-const PRESETS: Record<Exclude<BackendKey, "custom">, PresetConfig> = {
+export const PRESETS: Record<Exclude<BackendKey, "custom">, PresetConfig> = {
   "ollama-local":  { baseUrl: "http://localhost:11434/v1",      defaultModel: "qwen2.5-coder:7b",                        requiresApiKey: false, structuredOutputMode: "json_object" },
   "openrouter":    { baseUrl: "https://openrouter.ai/api/v1",   defaultModel: "meta-llama/llama-3.3-70b-instruct",       requiresApiKey: true,  structuredOutputMode: "json_object" },
   "groq":          { baseUrl: "https://api.groq.com/openai/v1", defaultModel: "llama-3.3-70b-versatile",                 requiresApiKey: true,  structuredOutputMode: "json_object" },
