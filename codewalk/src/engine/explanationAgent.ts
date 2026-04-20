@@ -137,7 +137,7 @@ export async function explain(
       endLine: String(segment.endLine),
       blockCode: segment.code,
       fileContext: fileContext,
-      additionalContext: deps.additionalContext ?? "",
+      additionalContext: deps.additionalContext ? `Prior context:\n${deps.additionalContext}` : "",
     },
     deps.promptsDir,
   );
@@ -149,8 +149,11 @@ export async function explain(
   let firstRaw: string | undefined;
   let firstReason: string | undefined;
   const useJsonSchema = deps.structuredOutputMode === "json_schema";
+  let retryFired = false;
+  const startMs = Date.now();
 
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt === 1) retryFired = true;
     throwIfCancelled(deps.token);
 
     const system = attempt === 0
@@ -203,6 +206,16 @@ export async function explain(
 
     try {
       const validated = validateResponse(raw, segment);
+      const modelTimeMs = Date.now() - startMs;
+      const prefix = retryFired ? "[explanation] WARN" : "[explanation]";
+      deps.logger?.(
+        `${prefix} segmentId=${segment.id} summary=${validated.summary.length}ch `
+        + `assumptions=${validated.pointsToConsider.assumptions.length} `
+        + `dangers=${validated.pointsToConsider.dangers.length} `
+        + `sideEffects=${validated.pointsToConsider.sideEffects.length} `
+        + `concepts=${validated.concepts.length} `
+        + `modelTimeMs=${modelTimeMs} retryFired=${retryFired}`,
+      );
       return {
         segmentId: segment.id,
         summary: validated.summary,

@@ -1,9 +1,10 @@
 import * as assert from "node:assert";
 import * as path from "node:path";
+import * as vscode from "vscode";
 import { suite, test } from "mocha";
 import { loadPrompt } from "../../src/prompts/loader";
 import { explain, DEFAULT_MAX_SEGMENT_LINES, EXPLANATION_PROMPT_VERSION, SegmentTooLargeError, ExplanationStreamError } from "../../src/engine/explanationAgent";
-import { MalformedResponseError, AuthError, RateLimitError } from "../../src/llm/adapter";
+import { MalformedResponseError, AuthError, RateLimitError, CancelledError } from "../../src/llm/adapter";
 import type { LLMAdapter } from "../../src/llm/adapter";
 import type { Segment } from "../../src/types";
 
@@ -431,5 +432,89 @@ suite("explain() — streaming", () => {
       }),
       (err: Error) => err instanceof RateLimitError,
     );
+  });
+});
+
+suite("explain() — cancellation", () => {
+  test("throws CancelledError synchronously if token cancelled before first attempt", async () => {
+    const seg = fakeSegment();
+    const source = new vscode.CancellationTokenSource();
+    source.cancel();
+    const adapter = stubAdapter([]);
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR, token: source.token }),
+      CancelledError,
+    );
+  });
+});
+
+suite("explain() — diagnostics", () => {
+  test("logger receives a one-line summary with field counts and does not receive raw code", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([VALID_RESPONSE]);
+    const lines: string[] = [];
+    await explain(seg, "const x = 1;", {
+      adapter,
+      promptsDir: PROMPTS_DIR,
+      logger: (msg) => lines.push(msg),
+    });
+    const first = lines.find(l => l.includes("[explanation]"));
+    assert.ok(first, "logger should receive an [explanation] summary line");
+    assert.ok(first!.includes("segmentId=seg-abc"));
+    assert.ok(first!.includes("assumptions=1"));
+    assert.ok(first!.includes("concepts=1"));
+    // Secret hygiene — raw code must never appear in logs.
+    for (const line of lines) {
+      assert.ok(!line.includes("const x = 1;"), `log line leaked raw code: ${line}`);
+    }
+  });
+
+  test("logger emits WARN line when retry fires", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([SUMMARY_EQUALS_ONELINER_RESPONSE, RETRY_SUCCEEDED_RESPONSE]);
+    const lines: string[] = [];
+    await explain(seg, "", {
+      adapter,
+      promptsDir: PROMPTS_DIR,
+      logger: (msg) => lines.push(msg),
+    });
+    assert.ok(lines.some(l => l.startsWith("[explanation] WARN") && l.includes("retryFired=true")));
+  });
+});
+
+suite("explain() — additionalContext Phase 5 seam", () => {
+  test("renders `Prior context:` block in the user prompt when additionalContext is non-empty", async () => {
+    const seg = fakeSegment();
+    const capturedUser: string[] = [];
+    const adapter: LLMAdapter = {
+      async complete(msgs) {
+        capturedUser.push(msgs.find(m => m.role === "user")!.content);
+        return VALID_RESPONSE;
+      },
+      async *completeStream() { yield ""; },
+    };
+    await explain(seg, "", {
+      adapter,
+      promptsDir: PROMPTS_DIR,
+      additionalContext: "You've already seen validateJWT.",
+    });
+    assert.strictEqual(capturedUser.length, 1);
+    assert.ok(capturedUser[0]!.includes("Prior context:"));
+    assert.ok(capturedUser[0]!.includes("validateJWT"));
+  });
+
+  test("omits the `Prior context:` header when additionalContext is undefined or empty", async () => {
+    const seg = fakeSegment();
+    const capturedUser: string[] = [];
+    const adapter: LLMAdapter = {
+      async complete(msgs) {
+        capturedUser.push(msgs.find(m => m.role === "user")!.content);
+        return VALID_RESPONSE;
+      },
+      async *completeStream() { yield ""; },
+    };
+    await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(capturedUser.length, 1);
+    assert.ok(!capturedUser[0]!.includes("Prior context:"));
   });
 });
