@@ -1,0 +1,36 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "869bcd3fc924",
+  "session_id": "6fe698da-4a29-4c37-a623-84b598284643",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-20T04:46:25.1272671Z",
+  "branch": "phase1-core-loop",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md",
+    "docs/POST_MVP_VISION.md",
+    "docs/PROJECT_STATE.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "acbf40e796a0",
+  "token_usage": {
+    "input_tokens": 112,
+    "cache_creation_tokens": 243874,
+    "cache_read_tokens": 2516392,
+    "output_tokens": 63500,
+    "api_call_count": 27
+  },
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-20T04:46:22.1238911Z",
+    "agent_lines": 825,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 825,
+    "agent_percentage": 100
+  }
+}

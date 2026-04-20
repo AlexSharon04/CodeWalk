@@ -1,0 +1,53 @@
+session start, brainstorm phase 2
+
+---
+
+B
+
+---
+
+explain these choices in caveman understanding terms to help me decide
+
+---
+
+I like the per project idea, lets say you need to quickly explore another repository, you open a new vs code window and run code walk on it, then would it run new llm calls for that project, and cache them? then when you switch back over to your other vs code window, youd have to re run the codewalk? wouldnt this change the explanations wording etc? how much harder would C be to impliment, also with the idea that any code changes will redo the codewalk explanations at least for the segment the codewalk change occured in or whatver
+
+---
+
+do your reccomendation
+
+---
+
+lets do B for sure, and impliment C but have it be togglable Prefetch (on/off)
+
+---
+
+B
+
+---
+
+this looks good!
+
+---
+
+looks perfect
+
+---
+
+for the file context in, i agree with you 100% that the file context should be in, always!!! i was even thinking about this problem for a broader use of codewalk where you can run itstead of on one file, you can run it on a group of files or a whole reposiotry, where before you go into a speficfic file to review, codewalk gains an understanding of all of the slected files or a full code repository. this way, it is able to give very speficc advice and instructions for each codeblock and where any errors that it might miss on a file by file analysis apper? help me flesh this idea out
+
+---
+
+I like A the static dependency graph idea, especially if there was some UX behind it so that maybe if it is in another file, you can jump to that file, codewalk it, and make sure that that new block of code where that variable is again or whatever it is is present, then it could get the past context of the variable along with the explanation. That way as you are walking through your code, the codewalk agent is learnign too and is able to notice abnormalities in the code or things that dont look quite right, rather than option B as the deep udnerstanding feature. Im not sure if this fits in with phase 2, if so add it, if not add it to the docs for a different phase
+
+---
+
+yes proceed
+
+---
+
+60 seconds, and i like the session wide approach
+
+---
+
+looks good

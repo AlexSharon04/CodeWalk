@@ -1,0 +1,27 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "869bcd3fc924",
+  "strategy": "manual-commit",
+  "branch": "phase1-core-loop",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/POST_MVP_VISION.md",
+    "docs/PROJECT_STATE.md",
+    "docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/86/9bcd3fc924/0/metadata.json",
+      "transcript": "/86/9bcd3fc924/0/full.jsonl",
+      "content_hash": "/86/9bcd3fc924/0/content_hash.txt",
+      "prompt": "/86/9bcd3fc924/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 112,
+    "cache_creation_tokens": 243874,
+    "cache_read_tokens": 2516392,
+    "output_tokens": 63500,
+    "api_call_count": 27
+  }
+}
