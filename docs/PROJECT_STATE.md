@@ -1,6 +1,6 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-04-21
+**Last updated:** 2026-04-20
 **Current phase:** Phase 2 — Level 1 Explanations — **schema migration complete, Phase 2 ready for demo**
 **Current step:** Phase 2b schema migration (Tasks 1-18) complete. Explanation type migrated from v1 (summary + pointsToConsider) to v2 (kind + purpose + flow + uses + produces + watch + concepts). All 113 tests passing. Kind classification implemented: trivial (no LLM call) vs logic/io (full schema). Ready for demo delivery.
 
@@ -131,6 +131,7 @@ None for Phase 1 closure. Phase 2 spec will open the following:
 - Visual signal for "only one panel open at a time".
 
 ## Recent decisions
+- **2026-04-20** — **Phase 2b — adaptive kind-aware explanation schema.** Replaced v1 `summary` + PTC arrays with a flat v2 schema: `kind ∈ {trivial, logic, io}` + `purpose` + `flow` + `uses` + `produces` + `watch` + `concepts`. Trivial-difficulty segments short-circuit the LLM (synthesized locally from `segment.oneLiner`) and are pre-populated into the cache at segmentation time. `EXPLANATION_PROMPT_VERSION` bumped v1 → v2; existing `ExplanationStore.rehydrate` sweep evicts v1 entries on first activation. See `docs/superpowers/specs/2026-04-20-codewalk-phase2b-adaptive-explanation.md` and plan in `docs/superpowers/plans/2026-04-20-codewalk-phase2b-adaptive-explanation.md`.
 - **2026-04-20** — **Phase 2 brainstorm completed.** Spec drafted at `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md`. Key calls: (1) Full Level 1 scope per design-doc §4.1 — summary + Points to Consider (assumptions, dangers, sideEffects) + tagged Concepts — in one agent call, one schema. (2) Cache keyed `${preset}:${promptVersion}:${segmentId}` and persisted in `ExtensionContext.globalState` — cross-project sharing intentional; content-hash segment ids (ADR-005 addendum) give natural invalidation. (3) Streaming always-on for the `summary` field via a new streaming path on `OpenAICompatibleAdapter`; lists (PTC, concepts) render atomically at stream end. (4) Prefetch opt-in via `codewalk.explanation.prefetchOnSegmentation` (default `false`), session-wide disable on `AuthError`, concurrency 2. (5) `CommentController` with `<details>` Concepts block, re-click-to-toggle, no auto-expand of first block. (6) Stream-idle timeout 60s. (7) One Phase 5 seam preserved: `ExplanationDeps.additionalContext?: string` — always `undefined` in Phase 2.
 - **2026-04-20** — **Post-MVP vision doc created.** New `docs/POST_MVP_VISION.md` sibling to `IMPLEMENTATION_PLAN.md`, capturing Phase 5 (Cross-file Intelligence) design in three layers: static dependency graph (tree-sitter, zero LLM cost), symbol-context accumulator (working memory grows as user walks), abnormality detection (prompt-level rule activated when ≥2 sightings exist). Walk-trail + jump-to-definition UX sketched. Rationale: user-raised idea during brainstorm; too large for Phase 2 scope; worth preserving because it's the first feature in the roadmap that's unambiguously agentic rather than LLM-wrapper.
 - **2026-04-20** — **Phase 1 smoke-test findings.** Interactive testing against real providers surfaced three bugs that unit tests with mocked fetches couldn't catch: (1) Groq `llama-3.3-70b-versatile` rejects `response_format: {type: "json_schema"}`; (2) Anthropic's OAI-compat endpoint at `https://api.anthropic.com/v1/chat/completions` rejects `{type: "json_object"}` and requires `json_schema`; (3) Anthropic's OAI-compat also rejects requests with only a `system` role message, demanding at least one `user` message. Each provider is "OpenAI-compatible" for different subsets of the spec.
@@ -165,6 +166,28 @@ These pieces are already in place and Phase 2 can build on them without refactor
 - Typed errors cover the paths Phase 2 needs (network, auth, rate-limit, malformed, file-too-large, cancelled).
 - **ADR-005 contract** is the template for Phase 2's explanation agent: input guard → parse → per-item validate → cross-item validate → single retry with threaded reason → logger-injected diagnostics → env-gated eval harness. Cancellation token and content-hash ids propagate the same way.
 - API keys are in `context.secrets` — any new code reading keys calls `getApiKey(context)`, never `configuration.get("apiKey")`.
+
+## Phase 2b manual verification checklist
+
+### Adaptive output
+- [ ] Open a file with imports at the top. Run `CodeWalk: Start Walkthrough`.
+- [ ] After segmentation completes, click the imports-block CodeLens — panel opens INSTANTLY with one italic line. No spinner, no streaming.
+- [ ] Click a mid-file logic block — panel shows a bold `purpose`, then `**Flow**`, `**Uses**`, `**Produces**`, `**Watch**` bullets.
+- [ ] Click a small (3–5 line) non-trivial block — verify `Watch` has 0 or 1 items, not 3.
+- [ ] Click an I/O block (fetch or DB call) — `uses` items name specific endpoints/tables/symbols.
+
+### Runtime
+- [ ] Trivial clicks: instant (< 50 ms perceived).
+- [ ] Logic/io clicks: purpose arrives in ~1–2s, bullets within another ~2–3s. Overall ~3–5s per non-trivial click on Anthropic (down from ~20s in v1).
+
+### Cache invalidation
+- [ ] Before upgrade: open a file and click a non-trivial block; note the v1 entry lands in cache.
+- [ ] Install v2. Reload window. Click the same block — it re-streams (v1 entry dropped on construction).
+- [ ] `CodeWalk: Reset Explanation Cache` still works — clears v2 entries too.
+
+### Kind normalization
+- [ ] With debug logging on, verify `[explanation]` log lines include `kind=…` and `source=llm|synth` fields.
+- [ ] If any log line starts with `[explanation] WARN trivial-kind returned populated arrays`, it means the model mis-tagged a rich block as trivial and the normalizer cleaned it up — acceptable.
 
 ## What's next
 Phase 2 fixes, preparing for phase 3.
