@@ -267,35 +267,29 @@ function renderExplanation(exp: Explanation): vscode.MarkdownString {
     md.appendMarkdown(`**${exp.purpose}**`);
   }
 
-  // Only add details if done
-  if (exp.renderState === "done") {
-    // Flow section
-    if (exp.flow.length > 0) {
-      md.appendMarkdown(`\n\n### Flow\n${exp.flow.map(s => `- ${s}`).join("\n")}`);
-    }
+  if (exp.renderState !== "done") {
+    return md;
+  }
 
-    // Uses section
-    if (exp.uses.length > 0) {
-      md.appendMarkdown(`\n\n### Uses\n${exp.uses.map(s => `- ${s}`).join("\n")}`);
-    }
-
-    // Produces section
-    if (exp.produces.length > 0) {
-      md.appendMarkdown(`\n\n### Produces\n${exp.produces.map(s => `- ${s}`).join("\n")}`);
-    }
-
-    // Watch section
-    if (exp.watch.length > 0) {
-      md.appendMarkdown(`\n\n### Watch\n${exp.watch.map(s => `- ${s}`).join("\n")}`);
-    }
-
-    // Concepts section as collapsible details
-    if (exp.concepts.length > 0) {
-      const body = exp.concepts
-        .map(c => `**${c.name}** — ${c.briefExplainer}\n\n*${c.relevance}*`)
-        .join("\n\n");
-      md.appendMarkdown(`\n\n### Concepts (${exp.concepts.length})\n\n${body}`);
-    }
+  if (exp.flow.length) {
+    md.appendMarkdown(`\n\n**Flow**\n${exp.flow.map(s => `- ${s}`).join("\n")}`);
+  }
+  if (exp.uses.length) {
+    const items = exp.uses.map(s => `\`${s}\``).join(" · ");
+    md.appendMarkdown(`\n\n**Uses** · ${items}`);
+  }
+  if (exp.produces.length) {
+    const items = exp.produces.join(" · ");
+    md.appendMarkdown(`\n\n**Produces** · ${items}`);
+  }
+  if (exp.watch.length) {
+    md.appendMarkdown(`\n\n**Watch**\n${exp.watch.map(s => `- ${s}`).join("\n")}`);
+  }
+  if (exp.concepts.length) {
+    const body = exp.concepts
+      .map(c => `**${c.name}** — ${c.briefExplainer}\n\n_${c.relevance}_`)
+      .join("\n\n");
+    md.appendMarkdown(`\n\n<details><summary>Concepts (${exp.concepts.length})</summary>\n\n${body}\n\n</details>`);
   }
 
   return md;

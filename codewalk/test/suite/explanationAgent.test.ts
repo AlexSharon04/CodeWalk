@@ -564,3 +564,86 @@ suite("explain trivial fast path", () => {
     assert.strictEqual(exp.renderState, "done");
   });
 });
+
+suite("v2 kind-aware validation", () => {
+  test("kind=trivial with populated arrays is normalized to empty", async () => {
+    const adapter = stubAdapter([JSON.stringify({
+      kind: "trivial",
+      purpose: "A short trivial purpose that is still 20+ characters long.",
+      flow: ["this should be dropped but is 20+ chars long for validation"],
+      uses: ["also-should-be-dropped-specific-enough"],
+      produces: [],
+      watch: [],
+      concepts: [{ name: "X", briefExplainer: "abc", relevance: "def" }],
+    })]);
+    const seg = fakeSegment({ difficulty: "standard" });
+    const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(exp.kind, "trivial");
+    assert.deepStrictEqual(exp.flow, []);
+    assert.deepStrictEqual(exp.uses, []);
+    assert.deepStrictEqual(exp.concepts, []);
+  });
+
+  test("kind=logic with empty flow+watch+concepts retries and fails", async () => {
+    const emptyish = JSON.stringify({
+      kind: "logic",
+      purpose: "A 20+ character purpose that still populates nothing valuable.",
+      flow: [],
+      uses: ["just-a-symbol-specific-enough"],
+      produces: ["just-an-output-specific-enough"],
+      watch: [],
+      concepts: [],
+    });
+    const adapter = stubAdapter([emptyish, emptyish]);
+    const seg = fakeSegment({ difficulty: "standard" });
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      (err: Error) => err instanceof MalformedResponseError,
+    );
+  });
+
+  test("kind=io with only flow and uses passes validation", async () => {
+    const adapter = stubAdapter([JSON.stringify({
+      kind: "io",
+      purpose: "An I/O block whose purpose is long enough for validation.",
+      flow: ["connects to the database", "issues a query to fetch", "returns the row results"],
+      uses: ["db.users.findOne"],
+      produces: [],
+      watch: [],
+      concepts: [],
+    })]);
+    const seg = fakeSegment({ difficulty: "standard" });
+    const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(exp.kind, "io");
+    assert.strictEqual(exp.flow.length, 3);
+  });
+
+  test("flow over 5 items is truncated to 5 without fatal error", async () => {
+    const adapter = stubAdapter([JSON.stringify({
+      kind: "logic",
+      purpose: "A purpose that is 20+ characters long for validation.",
+      flow: ["a".repeat(16), "b".repeat(16), "c".repeat(16), "d".repeat(16), "e".repeat(16), "f".repeat(16), "g".repeat(16)],
+      uses: [],
+      produces: [],
+      watch: [],
+      concepts: [],
+    })]);
+    const seg = fakeSegment({ difficulty: "standard" });
+    const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
+    assert.strictEqual(exp.flow.length, 5);
+  });
+
+  test("kind value outside {trivial,logic,io} is rejected (triggers retry)", async () => {
+    const bad = JSON.stringify({
+      kind: "function",
+      purpose: "A purpose 20+ chars long enough for validation here.",
+      flow: [], uses: [], produces: [], watch: [], concepts: [],
+    });
+    const adapter = stubAdapter([bad, bad]);
+    const seg = fakeSegment({ difficulty: "standard" });
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      (err: Error) => err instanceof MalformedResponseError,
+    );
+  });
+});

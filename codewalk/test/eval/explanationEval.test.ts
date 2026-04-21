@@ -14,6 +14,7 @@ interface Fixture {
   segment: Segment;
   fileContext: string;
   expect: {
+    expectedKind?: "trivial" | "logic" | "io";
     mustMention: string[];
     mustNotMention?: string[];
     minPurposeLength?: number;
@@ -40,6 +41,7 @@ const FIXTURES: Fixture[] = [
     },
     fileContext: "// (elided — eval uses block-only context for determinism)",
     expect: {
+      expectedKind: "io",
       mustMention: ["verif", "HS256"],       // purpose, flow, uses, produces, or watch must mention verify/verification and HS256
       mustNotMention: ["TODO", "FIXME", "I think"],
       minPurposeLength: 80,
@@ -99,6 +101,9 @@ suite("explanation eval", () => {
 
       console.log(`[eval] ${fx.name} purpose=${exp.purpose.length}ch mustMention=${JSON.stringify(mustMentionHits)}/${JSON.stringify(fx.expect.mustMention)} ${mustMentionHits.length === fx.expect.mustMention.length ? "PASS" : "FAIL"}`);
       console.log(`       flow=${exp.flow.length} uses=${exp.uses.length} produces=${exp.produces.length} watch=${exp.watch.length} concepts=${exp.concepts.length}`);
+      if (fx.expect.expectedKind && exp.kind !== fx.expect.expectedKind) {
+        console.warn(`       WARN expected kind=${fx.expect.expectedKind}, got ${exp.kind}`);
+      }
       if (!lenOk) console.warn(`       WARN purpose below minPurposeLength ${fx.expect.minPurposeLength}`);
       if (mustNotMentionHits.length) console.warn(`       WARN mustNotMention hits: ${mustNotMentionHits.join(", ")}`);
       if (fx.expect.expectedConceptsIncluding && conceptHits.length !== fx.expect.expectedConceptsIncluding.length) {

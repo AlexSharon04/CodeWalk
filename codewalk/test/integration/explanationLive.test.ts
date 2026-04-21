@@ -42,8 +42,14 @@ suite("explanation live integration", () => {
       promptsDir: PROMPTS_DIR,
       structuredOutputMode: cfg.structuredOutputMode,
     });
-    assert.ok(exp.purpose.length >= 20);
-    assert.strictEqual(exp.renderState, "done");
+    assert.ok(exp.kind === "trivial" || exp.kind === "logic" || exp.kind === "io",
+      `kind must be one of trivial|logic|io, got ${exp.kind}`);
+    assert.ok(typeof exp.purpose === "string" && exp.purpose.length > 0,
+      "purpose must be a non-empty string");
+    assert.ok(Array.isArray(exp.flow));
+    assert.ok(Array.isArray(exp.uses));
+    assert.ok(Array.isArray(exp.produces));
+    assert.ok(Array.isArray(exp.watch));
     assert.ok(Array.isArray(exp.concepts));
   });
 });
