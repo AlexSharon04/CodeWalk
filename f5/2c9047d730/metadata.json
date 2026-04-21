@@ -3,7 +3,7 @@
   "checkpoint_id": "f52c9047d730",
   "strategy": "manual-commit",
   "branch": "phase1-core-loop",
-  "checkpoints_count": 3,
+  "checkpoints_count": 21,
   "files_touched": [
     "codewalk/src/engine/explanationAgent.ts"
   ],
@@ -19,13 +19,19 @@
       "transcript": "/f5/2c9047d730/1/full.jsonl",
       "content_hash": "/f5/2c9047d730/1/content_hash.txt",
       "prompt": "/f5/2c9047d730/1/prompt.txt"
+    },
+    {
+      "metadata": "/f5/2c9047d730/2/metadata.json",
+      "transcript": "/f5/2c9047d730/2/full.jsonl",
+      "content_hash": "/f5/2c9047d730/2/content_hash.txt",
+      "prompt": "/f5/2c9047d730/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 1580,
-    "cache_creation_tokens": 358557,
-    "cache_read_tokens": 5041845,
-    "output_tokens": 96649,
-    "api_call_count": 43
+    "input_tokens": 1834,
+    "cache_creation_tokens": 1045813,
+    "cache_read_tokens": 29708966,
+    "output_tokens": 245643,
+    "api_call_count": 190
   }
 }
