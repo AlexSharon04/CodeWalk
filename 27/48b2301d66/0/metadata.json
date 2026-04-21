@@ -1,0 +1,42 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "2748b2301d66",
+  "session_id": "0b09dd6d-8d4d-4f11-8bb9-639fe4e37844",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-21T02:46:31.1952264Z",
+  "branch": "phase1-core-loop",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "codewalk/src/engine/segmenter.ts",
+    "codewalk/src/llm/adapter.ts",
+    "codewalk/src/llm/openAiCompatibleAdapter.ts",
+    "codewalk/src/providers/commentController.ts",
+    "codewalk/test/suite/adapter.test.ts",
+    "codewalk/test/suite/commentController.test.ts",
+    "docs/POST_MVP_VISION.md",
+    "docs/PROJECT_STATE.md",
+    "docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "531aa4f698e6",
+  "token_usage": {
+    "input_tokens": 1574,
+    "cache_creation_tokens": 313712,
+    "cache_read_tokens": 5999378,
+    "output_tokens": 97976,
+    "api_call_count": 42
+  },
+  "session_metrics": {
+    "turn_count": 9
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-21T02:46:28.2256415Z",
+    "agent_lines": 178,
+    "human_added": 391,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 569,
+    "agent_percentage": 31.282952548330407
+  }
+}
