@@ -41,6 +41,7 @@ export class PrefetchQueue implements vscode.Disposable {
     this.perUriTokens.set(uri.toString(), source);
 
     const needsFetch = segments.filter(seg => {
+      if (seg.difficulty === "trivial") return false;
       const cached = this.deps.explanationStore.get(seg.id, this.deps.preset, this.deps.promptVersion);
       return !cached || cached.renderState !== "done";
     });
@@ -77,8 +78,12 @@ export class PrefetchQueue implements vscode.Disposable {
           // Mark streaming placeholder so concurrent user clicks know an agent is working.
           this.deps.explanationStore.set(job.segment.id, this.deps.preset, this.deps.promptVersion, {
             segmentId: job.segment.id,
-            summary: "",
-            pointsToConsider: { assumptions: [], dangers: [], sideEffects: [] },
+            kind: "logic",
+            purpose: "",
+            flow: [],
+            uses: [],
+            produces: [],
+            watch: [],
             concepts: [],
             renderState: "streaming",
           });

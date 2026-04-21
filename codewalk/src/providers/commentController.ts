@@ -87,7 +87,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
   private renderLoaderFrame(): void {
     if (!this.openThread || !this.openSegment || this.loaderStartMs === undefined) return;
     const exp = this.expStore.get(this.openSegment.id, this.deps.preset, this.deps.promptVersion);
-    const summary = exp?.summary ?? "";
+    const partialPurpose = exp?.purpose ?? "";
     const elapsedMs = Date.now() - this.loaderStartMs;
     const dotCount = 1 + Math.floor(elapsedMs / 400) % 3;
     const dots = ".".repeat(dotCount);
@@ -95,10 +95,10 @@ export class CodeWalkCommentController implements vscode.Disposable {
     const md = new vscode.MarkdownString("", true);
     md.supportHtml = true;
     md.isTrusted = false;
-    if (summary.length === 0) {
+    if (partialPurpose.length === 0) {
       md.appendMarkdown(`_Analyzing${dots} (${secs}s)_`);
     } else {
-      md.appendMarkdown(summary);
+      md.appendMarkdown(`**${partialPurpose}**`);
       md.appendMarkdown(`\n\n---\n\n_Gathering details${dots} (${secs}s)_`);
     }
     this.openThread.comments = [new CodeWalkComment(md)];
@@ -158,8 +158,12 @@ export class CodeWalkCommentController implements vscode.Disposable {
     this.startLoader();
     this.expStore.set(segmentId, this.deps.preset, this.deps.promptVersion, {
       segmentId,
-      summary: "",
-      pointsToConsider: { assumptions: [], dangers: [], sideEffects: [] },
+      kind: "logic",
+      purpose: "",
+      flow: [],
+      uses: [],
+      produces: [],
+      watch: [],
       concepts: [],
       renderState: "streaming",
     });
@@ -177,7 +181,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
           if (!current) return;
           this.expStore.set(segmentId, this.deps.preset, this.deps.promptVersion, {
             ...current,
-            summary: partial.summary ?? current.summary,
+            purpose: partial.purpose ?? current.purpose,
             renderState: "streaming",
           });
         },
@@ -249,32 +253,51 @@ function renderExplanation(exp: Explanation): vscode.MarkdownString {
   const md = new vscode.MarkdownString("", true);
   md.supportHtml = true;
   md.isTrusted = false;
-  if (exp.renderState === "streaming" && !exp.summary) {
+
+  // Handle streaming state with no purpose yet
+  if (exp.renderState === "streaming" && !exp.purpose) {
     md.appendMarkdown("_Analyzing…_");
     return md;
   }
-  md.appendMarkdown(exp.summary);
+
+  // Render purpose (trivial shows italicized, others show bold)
+  if (exp.kind === "trivial") {
+    md.appendMarkdown(`*${exp.purpose}*`);
+  } else {
+    md.appendMarkdown(`**${exp.purpose}**`);
+  }
+
+  // Only add details if done
   if (exp.renderState === "done") {
-    const sections: string[] = [];
-    if (exp.pointsToConsider.assumptions.length) {
-      sections.push(`### Assumptions\n${exp.pointsToConsider.assumptions.map(s => `- ${s}`).join("\n")}`);
+    // Flow section
+    if (exp.flow.length > 0) {
+      md.appendMarkdown(`\n\n### Flow\n${exp.flow.map(s => `- ${s}`).join("\n")}`);
     }
-    if (exp.pointsToConsider.dangers.length) {
-      sections.push(`### Dangers\n${exp.pointsToConsider.dangers.map(s => `- ${s}`).join("\n")}`);
+
+    // Uses section
+    if (exp.uses.length > 0) {
+      md.appendMarkdown(`\n\n### Uses\n${exp.uses.map(s => `- ${s}`).join("\n")}`);
     }
-    if (exp.pointsToConsider.sideEffects.length) {
-      sections.push(`### Side effects\n${exp.pointsToConsider.sideEffects.map(s => `- ${s}`).join("\n")}`);
+
+    // Produces section
+    if (exp.produces.length > 0) {
+      md.appendMarkdown(`\n\n### Produces\n${exp.produces.map(s => `- ${s}`).join("\n")}`);
     }
-    if (sections.length) {
-      md.appendMarkdown(`\n\n${sections.join("\n\n")}`);
+
+    // Watch section
+    if (exp.watch.length > 0) {
+      md.appendMarkdown(`\n\n### Watch\n${exp.watch.map(s => `- ${s}`).join("\n")}`);
     }
-    if (exp.concepts.length) {
+
+    // Concepts section as collapsible details
+    if (exp.concepts.length > 0) {
       const body = exp.concepts
         .map(c => `**${c.name}** — ${c.briefExplainer}\n\n*${c.relevance}*`)
         .join("\n\n");
       md.appendMarkdown(`\n\n### Concepts (${exp.concepts.length})\n\n${body}`);
     }
   }
+
   return md;
 }
 

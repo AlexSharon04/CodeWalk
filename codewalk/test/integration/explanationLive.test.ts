@@ -42,7 +42,7 @@ suite("explanation live integration", () => {
       promptsDir: PROMPTS_DIR,
       structuredOutputMode: cfg.structuredOutputMode,
     });
-    assert.ok(exp.summary.length >= 20);
+    assert.ok(exp.purpose.length >= 20);
     assert.strictEqual(exp.renderState, "done");
     assert.ok(Array.isArray(exp.concepts));
   });

@@ -16,7 +16,7 @@ interface Fixture {
   expect: {
     mustMention: string[];
     mustNotMention?: string[];
-    minSummaryLength?: number;
+    minPurposeLength?: number;
     expectedConceptsIncluding?: string[];
   };
 }
@@ -40,9 +40,9 @@ const FIXTURES: Fixture[] = [
     },
     fileContext: "// (elided — eval uses block-only context for determinism)",
     expect: {
-      mustMention: ["verif", "HS256"],       // summary or PTC must mention verify/verification and HS256
+      mustMention: ["verif", "HS256"],       // purpose, flow, uses, produces, or watch must mention verify/verification and HS256
       mustNotMention: ["TODO", "FIXME", "I think"],
-      minSummaryLength: 80,
+      minPurposeLength: 80,
       expectedConceptsIncluding: ["JWT"],
     },
   },
@@ -84,21 +84,22 @@ suite("explanation eval", () => {
       });
 
       const allText =
-        exp.summary
-        + " " + exp.pointsToConsider.assumptions.join(" ")
-        + " " + exp.pointsToConsider.dangers.join(" ")
-        + " " + exp.pointsToConsider.sideEffects.join(" ");
+        exp.purpose
+        + " " + exp.flow.join(" ")
+        + " " + exp.uses.join(" ")
+        + " " + exp.produces.join(" ")
+        + " " + exp.watch.join(" ");
 
       const mustMentionHits = matchesAny(allText, fx.expect.mustMention);
       const mustNotMentionHits = matchesAny(allText, fx.expect.mustNotMention ?? []);
       const conceptHits = fx.expect.expectedConceptsIncluding
         ? matchesAny(exp.concepts.map(c => c.name).join(" "), fx.expect.expectedConceptsIncluding)
         : [];
-      const lenOk = (fx.expect.minSummaryLength ?? 0) <= exp.summary.length;
+      const lenOk = (fx.expect.minPurposeLength ?? 0) <= exp.purpose.length;
 
-      console.log(`[eval] ${fx.name} summary=${exp.summary.length}ch mustMention=${JSON.stringify(mustMentionHits)}/${JSON.stringify(fx.expect.mustMention)} ${mustMentionHits.length === fx.expect.mustMention.length ? "PASS" : "FAIL"}`);
-      console.log(`       assumptions=${exp.pointsToConsider.assumptions.length} dangers=${exp.pointsToConsider.dangers.length} sideEffects=${exp.pointsToConsider.sideEffects.length} concepts=${exp.concepts.length}`);
-      if (!lenOk) console.warn(`       WARN summary below minSummaryLength ${fx.expect.minSummaryLength}`);
+      console.log(`[eval] ${fx.name} purpose=${exp.purpose.length}ch mustMention=${JSON.stringify(mustMentionHits)}/${JSON.stringify(fx.expect.mustMention)} ${mustMentionHits.length === fx.expect.mustMention.length ? "PASS" : "FAIL"}`);
+      console.log(`       flow=${exp.flow.length} uses=${exp.uses.length} produces=${exp.produces.length} watch=${exp.watch.length} concepts=${exp.concepts.length}`);
+      if (!lenOk) console.warn(`       WARN purpose below minPurposeLength ${fx.expect.minPurposeLength}`);
       if (mustNotMentionHits.length) console.warn(`       WARN mustNotMention hits: ${mustNotMentionHits.join(", ")}`);
       if (fx.expect.expectedConceptsIncluding && conceptHits.length !== fx.expect.expectedConceptsIncluding.length) {
         console.warn(`       WARN concepts missing: ${fx.expect.expectedConceptsIncluding.filter(x => !conceptHits.includes(x)).join(", ")}`);

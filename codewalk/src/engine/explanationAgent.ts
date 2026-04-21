@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { Explanation, Segment, Concept } from "../types";
+import type { Explanation, ExplanationKind, Segment, Concept } from "../types";
 import type { JsonSchemaSpec, LLMAdapter, ChatMessage } from "../llm/adapter";
 import {
   CancelledError,
@@ -20,17 +20,12 @@ export const EXPLANATION_JSON_SCHEMA: JsonSchemaSpec = {
   schema: {
     type: "object",
     properties: {
-      summary: { type: "string" },
-      pointsToConsider: {
-        type: "object",
-        properties: {
-          assumptions: { type: "array", items: { type: "string" } },
-          dangers: { type: "array", items: { type: "string" } },
-          sideEffects: { type: "array", items: { type: "string" } },
-        },
-        required: ["assumptions", "dangers", "sideEffects"],
-        additionalProperties: false,
-      },
+      kind: { type: "string", enum: ["trivial", "logic", "io"] },
+      purpose: { type: "string" },
+      flow: { type: "array", items: { type: "string" } },
+      uses: { type: "array", items: { type: "string" } },
+      produces: { type: "array", items: { type: "string" } },
+      watch: { type: "array", items: { type: "string" } },
       concepts: {
         type: "array",
         items: {
@@ -45,15 +40,15 @@ export const EXPLANATION_JSON_SCHEMA: JsonSchemaSpec = {
         },
       },
     },
-    required: ["summary", "pointsToConsider", "concepts"],
+    required: ["kind", "purpose", "flow", "uses", "produces", "watch", "concepts"],
     additionalProperties: false,
   },
 };
 
-const SUMMARY_RE = /"summary"\s*:\s*"((?:[^"\\]|\\.)*)/;
+const PURPOSE_RE = /"purpose"\s*:\s*"((?:[^"\\]|\\.)*)/;
 
-export function extractPartialSummary(buffer: string): string | undefined {
-  const match = SUMMARY_RE.exec(buffer);
+export function extractPartialPurpose(buffer: string): string | undefined {
+  const match = PURPOSE_RE.exec(buffer);
   if (!match) return undefined;
   try {
     return JSON.parse(`"${match[1]}"`);
@@ -96,7 +91,7 @@ export interface ExplanationDeps {
   readonly promptsDir: string;
   readonly logger?: ExplanationLogger;
   readonly token?: vscode.CancellationToken;
-  readonly onPartial?: (partial: { summary?: string }) => void;
+  readonly onPartial?: (partial: { purpose?: string }) => void;
   /** Phase 5 hook — always undefined in Phase 2. See docs/POST_MVP_VISION.md. */
   readonly additionalContext?: string;
   /** Override for tests. */
@@ -133,12 +128,12 @@ export class ExplanationStreamError extends Error {
 }
 
 interface RawExplanation {
-  summary?: unknown;
-  pointsToConsider?: {
-    assumptions?: unknown;
-    dangers?: unknown;
-    sideEffects?: unknown;
-  };
+  kind?: unknown;
+  purpose?: unknown;
+  flow?: unknown;
+  uses?: unknown;
+  produces?: unknown;
+  watch?: unknown;
   concepts?: unknown;
 }
 
@@ -146,8 +141,27 @@ interface RawExplanation {
 export class ValidationFailure extends Error {}
 
 const GENERIC_PTC_RE = /^(be careful|make sure|consider|note that|avoid|watch out|don[\u0027\u2019]t forget)\b/i;
-const MIN_SUMMARY_LEN = 20;
-const MIN_PTC_ITEM_LEN = 15;
+const MIN_PURPOSE_LEN = 20;
+const MIN_LIST_ITEM_LEN = 15;
+const CAP_FLOW = 5;
+const CAP_USES = 5;
+const CAP_PRODUCES = 3;
+const CAP_WATCH = 3;
+const CAP_CONCEPTS = 3;
+
+export function synthesizeTrivial(segment: Segment): Explanation {
+  return {
+    segmentId: segment.id,
+    kind: "trivial",
+    purpose: segment.oneLiner,
+    flow: [],
+    uses: [],
+    produces: [],
+    watch: [],
+    concepts: [],
+    renderState: "done",
+  };
+}
 
 export async function explain(
   segment: Segment,
@@ -163,6 +177,17 @@ export async function explain(
 
   throwIfCancelled(deps.token);
 
+  const startMs = Date.now();
+
+  if (segment.difficulty === "trivial") {
+    const exp = synthesizeTrivial(segment);
+    const modelTimeMs = Date.now() - startMs;
+    deps.logger?.(
+      `[explanation] segmentId=${segment.id} kind=trivial purpose=${exp.purpose.length}ch modelTimeMs=${modelTimeMs} source=synth`,
+    );
+    return exp;
+  }
+
   const prompt = await loadPrompt(
     "explanation",
     {
@@ -174,6 +199,7 @@ export async function explain(
       blockCode: segment.code,
       fileContext: fileContext,
       additionalContext: deps.additionalContext ? `Prior context:\n${deps.additionalContext}` : "",
+      difficulty: segment.difficulty,
     },
     deps.promptsDir,
   );
@@ -185,7 +211,6 @@ export async function explain(
   let firstRaw: string | undefined;
   let firstReason: string | undefined;
   let retryFired = false;
-  const startMs = Date.now();
 
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt === 1) retryFired = true;
@@ -224,12 +249,12 @@ export async function explain(
           chunkCount++;
           if (firstChunkMs === undefined) firstChunkMs = Date.now() - streamStartMs;
           buffer += chunk;
-          const partial = extractPartialSummary(buffer);
+          const partial = extractPartialPurpose(buffer);
           if (partial !== undefined && partial.length > lastEmittedLength) {
             partialCount++;
             if (firstPartialMs === undefined) firstPartialMs = Date.now() - streamStartMs;
             deps.logger?.(`[explain-diag] partial #${partialCount} ms=${Date.now() - streamStartMs} len=${partial.length}`);
-            deps.onPartial({ summary: partial });
+            deps.onPartial({ purpose: partial });
             lastEmittedLength = partial.length;
           }
         }
@@ -263,17 +288,19 @@ export async function explain(
       const modelTimeMs = Date.now() - startMs;
       const prefix = retryFired ? "[explanation] WARN" : "[explanation]";
       deps.logger?.(
-        `${prefix} segmentId=${segment.id} summary=${validated.summary.length}ch `
-        + `assumptions=${validated.pointsToConsider.assumptions.length} `
-        + `dangers=${validated.pointsToConsider.dangers.length} `
-        + `sideEffects=${validated.pointsToConsider.sideEffects.length} `
-        + `concepts=${validated.concepts.length} `
-        + `modelTimeMs=${modelTimeMs} retryFired=${retryFired}`,
+        `${prefix} segmentId=${segment.id} kind=${validated.kind} purpose=${validated.purpose.length}ch `
+        + `flow=${validated.flow.length} uses=${validated.uses.length} produces=${validated.produces.length} `
+        + `watch=${validated.watch.length} concepts=${validated.concepts.length} `
+        + `modelTimeMs=${modelTimeMs} retryFired=${retryFired} source=llm`,
       );
       return {
         segmentId: segment.id,
-        summary: validated.summary,
-        pointsToConsider: validated.pointsToConsider,
+        kind: validated.kind,
+        purpose: validated.purpose,
+        flow: validated.flow,
+        uses: validated.uses,
+        produces: validated.produces,
+        watch: validated.watch,
         concepts: validated.concepts,
         renderState: "done",
       };
@@ -317,8 +344,12 @@ function guessLanguage(segment: Segment): string {
 }
 
 function validateResponse(raw: string, segment: Segment, logger?: ExplanationLogger): {
-  summary: string;
-  pointsToConsider: Explanation["pointsToConsider"];
+  kind: ExplanationKind;
+  purpose: string;
+  flow: string[];
+  uses: string[];
+  produces: string[];
+  watch: string[];
   concepts: Concept[];
 } {
   let obj: RawExplanation;
@@ -328,43 +359,36 @@ function validateResponse(raw: string, segment: Segment, logger?: ExplanationLog
     throw new ValidationFailure("response is not valid JSON");
   }
 
-  if (typeof obj.summary !== "string" || obj.summary.length < MIN_SUMMARY_LEN) {
-    throw new ValidationFailure(`summary is missing or shorter than ${MIN_SUMMARY_LEN} chars`);
+  if (obj.kind !== "trivial" && obj.kind !== "logic" && obj.kind !== "io") {
+    throw new ValidationFailure("kind is missing or not one of trivial|logic|io");
   }
-  if (obj.summary.trim().toLowerCase() === segment.oneLiner.trim().toLowerCase()) {
-    throw new ValidationFailure("summary is identical to segment.oneLiner — agent must expand on the one-liner, not echo it");
+  const kind: ExplanationKind = obj.kind;
+
+  if (typeof obj.purpose !== "string" || obj.purpose.length < MIN_PURPOSE_LEN) {
+    throw new ValidationFailure(`purpose is missing or shorter than ${MIN_PURPOSE_LEN} chars`);
+  }
+  if (obj.purpose.trim().toLowerCase() === segment.oneLiner.trim().toLowerCase()) {
+    throw new ValidationFailure("purpose is identical to segment.oneLiner — expand on it, don't echo it");
   }
 
-  const ptcIn = obj.pointsToConsider ?? {};
-  const pointsToConsider = {
-    assumptions: filterPtcItems(ptcIn.assumptions),
-    dangers: filterPtcItems(ptcIn.dangers),
-    sideEffects: filterPtcItems(ptcIn.sideEffects),
-  };
+  const flow = capAndFilter(obj.flow, CAP_FLOW, logger, "flow");
+  const uses = capAndFilter(obj.uses, CAP_USES, logger, "uses");
+  const produces = capAndFilter(obj.produces, CAP_PRODUCES, logger, "produces");
+  const watch = capAndFilter(obj.watch, CAP_WATCH, logger, "watch");
 
   const conceptsRaw = Array.isArray(obj.concepts) ? obj.concepts : [];
-  // DIAG(bug-B): remove after Phase 2 concepts rendering verified.
-  logger?.(`[explain-diag] concepts raw count: ${conceptsRaw.length}; rawKeys=${JSON.stringify(conceptsRaw.map((c: any) => (c && typeof c === "object") ? Object.keys(c) : typeof c))}`);
   const concepts: Concept[] = [];
   const seen = new Set<string>();
   for (const c of conceptsRaw) {
-    if (!c || typeof (c as any).name !== "string" || (c as any).name.length === 0) {
-      logger?.(`[explain-diag] concept dropped: missing/empty name; raw=${JSON.stringify(c).slice(0, 200)}`);
+    if (concepts.length >= CAP_CONCEPTS) {
+      logger?.(`[explain-diag] concept dropped: cap ${CAP_CONCEPTS} reached`);
       continue;
     }
-    if (typeof (c as any).briefExplainer !== "string" || (c as any).briefExplainer.length === 0) {
-      logger?.(`[explain-diag] concept dropped: missing/empty briefExplainer; name="${(c as any).name}"`);
-      continue;
-    }
-    if (typeof (c as any).relevance !== "string" || (c as any).relevance.length === 0) {
-      logger?.(`[explain-diag] concept dropped: missing/empty relevance; name="${(c as any).name}"`);
-      continue;
-    }
+    if (!c || typeof (c as any).name !== "string" || (c as any).name.length === 0) continue;
+    if (typeof (c as any).briefExplainer !== "string" || (c as any).briefExplainer.length === 0) continue;
+    if (typeof (c as any).relevance !== "string" || (c as any).relevance.length === 0) continue;
     const key = (c as any).name.trim().toLowerCase();
-    if (seen.has(key)) {
-      logger?.(`[explain-diag] concept dropped: duplicate name="${(c as any).name}"`);
-      continue;
-    }
+    if (seen.has(key)) continue;
     seen.add(key);
     concepts.push({
       name: (c as any).name,
@@ -373,15 +397,38 @@ function validateResponse(raw: string, segment: Segment, logger?: ExplanationLog
     });
   }
 
-  return { summary: obj.summary, pointsToConsider, concepts };
+  if (kind === "trivial") {
+    if (flow.length || uses.length || produces.length || watch.length || concepts.length) {
+      logger?.(`[explanation] WARN trivial-kind returned populated arrays — normalizing to empty`);
+    }
+    return { kind, purpose: obj.purpose, flow: [], uses: [], produces: [], watch: [], concepts: [] };
+  }
+
+  if (flow.length === 0 && watch.length === 0 && concepts.length === 0) {
+    throw new ValidationFailure("non-trivial block emitted no flow, watch, or concepts");
+  }
+
+  return { kind, purpose: obj.purpose, flow, uses, produces, watch, concepts };
 }
 
-function filterPtcItems(x: unknown): string[] {
+function capAndFilter(
+  x: unknown,
+  cap: number,
+  logger: ExplanationLogger | undefined,
+  fieldName: string,
+): string[] {
   if (!Array.isArray(x)) return [];
-  return x.filter(
-    (s): s is string =>
-      typeof s === "string"
-      && s.length >= MIN_PTC_ITEM_LEN
-      && !GENERIC_PTC_RE.test(s.trim()),
-  );
+  const out: string[] = [];
+  let dropped = 0;
+  for (const s of x) {
+    if (out.length >= cap) { dropped++; continue; }
+    if (typeof s !== "string") { dropped++; continue; }
+    if (s.length < MIN_LIST_ITEM_LEN) { dropped++; continue; }
+    if (GENERIC_PTC_RE.test(s.trim())) { dropped++; continue; }
+    out.push(s);
+  }
+  if (dropped > 0) {
+    logger?.(`[explain-diag] ${fieldName}: dropped ${dropped} items (cap ${cap})`);
+  }
+  return out;
 }

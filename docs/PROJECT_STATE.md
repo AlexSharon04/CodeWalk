@@ -1,8 +1,8 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-04-20
-**Current phase:** Phase 2 — Level 1 Explanations — **implementation complete, manual verification in progress**
-**Current step:** All 14 plan tasks landed. Unit tests (explanationAgent, explanationStore, commentController, prefetchQueue) green. Eval harness and live integration test committed behind env vars. Manual verification checklist available in this file.
+**Last updated:** 2026-04-21
+**Current phase:** Phase 2 — Level 1 Explanations — **schema migration complete, Phase 2 ready for demo**
+**Current step:** Phase 2b schema migration (Tasks 1-18) complete. Explanation type migrated from v1 (summary + pointsToConsider) to v2 (kind + purpose + flow + uses + produces + watch + concepts). All 113 tests passing. Kind classification implemented: trivial (no LLM call) vs logic/io (full schema). Ready for demo delivery.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**

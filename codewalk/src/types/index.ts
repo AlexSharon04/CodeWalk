@@ -16,14 +16,16 @@ export interface Concept {
   relevance: string;
 }
 
+export type ExplanationKind = "trivial" | "logic" | "io";
+
 export interface Explanation {
   segmentId: string;
-  summary: string;
-  pointsToConsider: {
-    assumptions: string[];
-    dangers: string[];
-    sideEffects: string[];
-  };
+  kind: ExplanationKind;
+  purpose: string;
+  flow: string[];
+  uses: string[];
+  produces: string[];
+  watch: string[];
   concepts: Concept[];
   renderState: "streaming" | "done" | "error";
 }
