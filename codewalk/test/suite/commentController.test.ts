@@ -163,11 +163,16 @@ suite("CodeWalkCommentController", () => {
     const updated = fakeExplanation("seg-1", "streaming");
     updated.summary = "Now with more characters streamed in for this block.";
     expStore.set("seg-1", "groq", "v1", updated);
-    // Give the event emitter a tick.
-    await new Promise(r => setImmediate(r));
-    const after = controller.currentThreadBody();
+    // Loader ticks at 250ms; the snap-on-partial path in onExplanationChanged should update
+    // within one microtask, but wait up to 1s to avoid CI flakes.
+    const deadline = Date.now() + 1000;
+    let after = controller.currentThreadBody();
+    while (Date.now() < deadline && !(after?.includes("more characters streamed"))) {
+      await new Promise(r => setTimeout(r, 30));
+      after = controller.currentThreadBody();
+    }
     assert.notStrictEqual(after, before);
-    assert.ok(after!.includes("more characters streamed"));
+    assert.ok(after!.includes("more characters streamed"), `typewriter did not catch up: got "${after}"`);
     controller.dispose();
     segStore.dispose();
     expStore.dispose();

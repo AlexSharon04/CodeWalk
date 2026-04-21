@@ -36,6 +36,8 @@ export class CodeWalkCommentController implements vscode.Disposable {
   private openThread: vscode.CommentThread | undefined;
   private openSegment: Segment | undefined;
   private openTokenSource: vscode.CancellationTokenSource | undefined;
+  private loaderTimer: ReturnType<typeof setInterval> | undefined;
+  private loaderStartMs: number | undefined;
   private readonly storeSub: vscode.Disposable;
 
   constructor(
@@ -64,6 +66,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
   }
 
   collapse(): void {
+    this.stopLoader();
     if (this.openTokenSource) {
       this.openTokenSource.cancel();
       this.openTokenSource.dispose();
@@ -72,6 +75,41 @@ export class CodeWalkCommentController implements vscode.Disposable {
     this.openThread?.dispose();
     this.openThread = undefined;
     this.openSegment = undefined;
+  }
+
+  private startLoader(): void {
+    if (this.loaderTimer) return;
+    this.loaderStartMs = Date.now();
+    this.renderLoaderFrame();
+    this.loaderTimer = setInterval(() => this.renderLoaderFrame(), 250);
+  }
+
+  private renderLoaderFrame(): void {
+    if (!this.openThread || !this.openSegment || this.loaderStartMs === undefined) return;
+    const exp = this.expStore.get(this.openSegment.id, this.deps.preset, this.deps.promptVersion);
+    const summary = exp?.summary ?? "";
+    const elapsedMs = Date.now() - this.loaderStartMs;
+    const dotCount = 1 + Math.floor(elapsedMs / 400) % 3;
+    const dots = ".".repeat(dotCount);
+    const secs = (elapsedMs / 1000).toFixed(1);
+    const md = new vscode.MarkdownString("", true);
+    md.supportHtml = true;
+    md.isTrusted = false;
+    if (summary.length === 0) {
+      md.appendMarkdown(`_Analyzing${dots} (${secs}s)_`);
+    } else {
+      md.appendMarkdown(summary);
+      md.appendMarkdown(`\n\n---\n\n_Gathering details${dots} (${secs}s)_`);
+    }
+    this.openThread.comments = [new CodeWalkComment(md)];
+  }
+
+  private stopLoader(): void {
+    if (this.loaderTimer) {
+      clearInterval(this.loaderTimer);
+      this.loaderTimer = undefined;
+      this.loaderStartMs = undefined;
+    }
   }
 
   async expand(segmentId: string): Promise<void> {
@@ -93,8 +131,9 @@ export class CodeWalkCommentController implements vscode.Disposable {
     if (!uri) return;
     const range = new vscode.Range(segment.startLine - 1, 0, segment.endLine - 1, 0);
     const thread = this.controller.createCommentThread(uri, range, []);
-    thread.label = `CodeWalk — ${segment.label}`;
+    thread.label = this.buildThreadLabel(uri, segment);
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
+    thread.canReply = false;
     thread.comments = [new CodeWalkComment(new vscode.MarkdownString("_Analyzing…_"))];
     this.openThread = thread;
     this.openSegment = segment;
@@ -106,14 +145,17 @@ export class CodeWalkCommentController implements vscode.Disposable {
       return;
     }
     if (cached && cached.renderState === "streaming") {
-      // Another caller (e.g. prefetch) already opened this stream. Subscribe via onDidChange only.
+      // Another caller (e.g. prefetch) already opened this stream. Start the loader so
+      // the user sees "Gathering details…" until the producer flips renderState to done.
       thread.comments = [new CodeWalkComment(renderExplanation(cached))];
+      this.startLoader();
       return;
     }
 
     // Cache miss — fetch.
     this.openTokenSource = new vscode.CancellationTokenSource();
     const fileContext = ""; // Future work: full-file context. Phase 2 leaves this empty.
+    this.startLoader();
     this.expStore.set(segmentId, this.deps.preset, this.deps.promptVersion, {
       segmentId,
       summary: "",
@@ -142,6 +184,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
       });
       this.expStore.set(segmentId, this.deps.preset, this.deps.promptVersion, final);
     } catch (err) {
+      this.stopLoader();
       if (err instanceof CancelledError) {
         if (this.openThread === thread) {
           thread.comments = [new CodeWalkComment(new vscode.MarkdownString("_Cancelled._"))];
@@ -161,7 +204,21 @@ export class CodeWalkCommentController implements vscode.Disposable {
     if (!this.openThread || this.openSegment?.id !== segmentId) return;
     const exp = this.expStore.get(segmentId, this.deps.preset, this.deps.promptVersion);
     if (!exp) return;
-    this.openThread.comments = [new CodeWalkComment(renderExplanation(exp))];
+    if (exp.renderState === "done") {
+      this.stopLoader();
+      this.openThread.comments = [new CodeWalkComment(renderExplanation(exp))];
+    } else if (this.loaderTimer) {
+      // Partial arrived mid-stream — snap the loader to the latest summary immediately
+      // so we don't wait up to 250ms for the next interval tick.
+      this.renderLoaderFrame();
+    }
+  }
+
+  private buildThreadLabel(uri: vscode.Uri, segment: Segment): string {
+    const segs = this.segStore.get(uri) ?? [];
+    const idx = segs.findIndex(s => s.id === segment.id);
+    const difficulty = segment.difficulty.charAt(0).toUpperCase() + segment.difficulty.slice(1);
+    return idx >= 0 ? `Block ${idx + 1} · ${difficulty}` : difficulty;
   }
 
   private findSegment(segmentId: string): Segment | undefined {
@@ -215,7 +272,7 @@ function renderExplanation(exp: Explanation): vscode.MarkdownString {
       const body = exp.concepts
         .map(c => `**${c.name}** — ${c.briefExplainer}\n\n*${c.relevance}*`)
         .join("\n\n");
-      md.appendMarkdown(`\n\n<details><summary>Concepts (${exp.concepts.length})</summary>\n\n${body}\n\n</details>`);
+      md.appendMarkdown(`\n\n### Concepts (${exp.concepts.length})\n\n${body}`);
     }
   }
   return md;

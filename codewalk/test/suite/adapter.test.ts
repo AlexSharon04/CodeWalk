@@ -102,7 +102,7 @@ suite("OpenAICompatibleAdapter.complete", () => {
     assert.deepStrictEqual(parsed.response_format, { type: "json_object" });
   });
 
-  test("uses json_schema when structuredOutputMode is json_schema", async () => {
+  test("uses json_schema with caller-provided schema when structuredOutputMode is json_schema", async () => {
     let capturedBody: string | undefined;
     const fetchFn: FetchFn = async (_url, init) => {
       capturedBody = init?.body as string;
@@ -114,15 +114,27 @@ suite("OpenAICompatibleAdapter.complete", () => {
         headers: { get: () => null },
       } as unknown as Response;
     };
+    const callerSchema = {
+      name: "caller_schema",
+      strict: true,
+      schema: { type: "object", properties: { x: { type: "string" } }, required: ["x"], additionalProperties: false },
+    };
     const a = new OpenAICompatibleAdapter({ ...CFG, structuredOutputMode: "json_schema" }, fetchFn);
-    await a.complete([{ role: "user", content: "hi" }], { responseFormat: "json_object" });
+    await a.complete(
+      [{ role: "user", content: "hi" }],
+      { responseFormat: "json_object", jsonSchema: callerSchema },
+    );
     const parsed = JSON.parse(capturedBody!);
     assert.strictEqual(parsed.response_format.type, "json_schema");
-    assert.strictEqual(parsed.response_format.json_schema.name, "codewalk_segments");
-    assert.strictEqual(parsed.response_format.json_schema.strict, true);
-    assert.deepStrictEqual(
-      parsed.response_format.json_schema.schema.required,
-      ["segments"],
+    assert.deepStrictEqual(parsed.response_format.json_schema, callerSchema);
+  });
+
+  test("throws when json_schema mode but no jsonSchema provided by caller", async () => {
+    const fetchFn: FetchFn = async () => ({ status: 200, ok: true, json: async () => ({}), text: async () => "", headers: { get: () => null } } as unknown as Response);
+    const a = new OpenAICompatibleAdapter({ ...CFG, structuredOutputMode: "json_schema" }, fetchFn);
+    await assert.rejects(
+      () => a.complete([{ role: "user", content: "hi" }], { responseFormat: "json_object" }),
+      /requires options\.jsonSchema/,
     );
   });
 

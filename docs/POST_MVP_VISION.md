@@ -107,6 +107,12 @@ Clicking the breadcrumb shows the full trail. `Alt+Left` pops the trail and retu
 
 Phase 2 leaves one hook for Phase 5 — `ExplanationDeps.additionalContext?: string` — which is always `undefined` in Phase 2. Phase 5 fills it from `SymbolContextStore`. No other Phase 2 surface changes for Phase 5 readiness.
 
+**Additional Phase 2 → Phase 5 seam.** The Phase 2 schema redesign introduces a `uses: string[]` field that holds plain-text references to symbols each block leans on (e.g. `db.users`, `bcrypt.compare`). In Phase 2 these render as plain strings. When Phase 5 lands, those same strings become clickable `codewalk.walkToSymbol` command links — zero schema change, zero re-explanation needed. Respect this text-to-link progression when writing the Phase 5 spec.
+
+### Referenced brainstorms
+
+- [`docs/superpowers/specs/2026-04-20-codewalk-phase2-explanation-schema-brainstorm.md`](superpowers/specs/2026-04-20-codewalk-phase2-explanation-schema-brainstorm.md) — preserves the 2026-04-20 reasoning that established the "blocks learning from each other" vision, the walk-trail UX rationale, and the `uses`-field text-to-link bet. Re-read before opening a Phase 5 spec.
+
 ### Open questions for Phase 5 spec
 
 - **When to regenerate vs append.** When the user returns from a jump, does the original explanation regenerate from scratch with the richer context, or does an addendum get appended? Trade-off: regeneration feels seamless but costs an LLM call each return; appendage is cheaper but visually noisier.

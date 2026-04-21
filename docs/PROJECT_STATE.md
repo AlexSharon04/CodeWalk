@@ -74,22 +74,22 @@ Run through both backend paths. Both must pass on the current commit.
 ## Phase 2 manual verification checklist (do before tagging `phase2-complete`)
 
 ### Streaming + panel behavior
-- [ ] Open `codewalk/test/fixtures/sample.ts`. Run `CodeWalk: Start Walkthrough`.
-- [ ] Click any CodeLens. Panel opens inline below the label. Summary streams in progressively (not all at once).
-- [ ] Points to Consider renders as three sub-sections: Assumptions, Dangers, Side effects.
-- [ ] Concepts section is a `<details>` block. Collapsed by default; expanding it reveals the tagged concepts.
+- [ YES ] Open `codewalk/test/fixtures/sample.ts`. Run `CodeWalk: Start Walkthrough`.
+- [ HALF, does Analyzing... static, then comes all at once, not token by token streaming :( needs improvement either with the token by token (would be so so cool), or a little loading image or a . -> .. -> ... -> . loop and a 1s ... 2s ... etc counter] Click any CodeLens. Panel opens inline below the label. Summary streams in progressively (not all at once).
+- [ YES] Points to Consider renders as three sub-sections: Assumptions, Dangers, Side effects.
+- [ NOTHING THERE WHEN EXPANDED ] Concepts section is a `<details>` block. Collapsed by default; expanding it reveals the tagged concepts.
 
 ### Single-panel invariant
-- [ ] Click block A's CodeLens — panel A opens.
-- [ ] Click block B's CodeLens — panel A disappears, panel B opens.
-- [ ] Click block B's CodeLens again — panel B disappears (toggle).
-- [ ] Switch to a different editor tab and back — the previously open panel is still open (editor focus doesn't collapse threads).
+- [ YES ] Click block A's CodeLens — panel A opens.
+- [ YES] Click block B's CodeLens — panel A disappears, panel B opens.
+- [ YES] Click block B's CodeLens again — panel B disappears (toggle).
+- [ YES] Switch to a different editor tab and back — the previously open panel is still open (editor focus doesn't collapse threads).
 
 ### Cache persistence
-- [ ] Click any CodeLens. Wait for the explanation to finish.
-- [ ] Reload the window (`Developer: Reload Window`).
-- [ ] Run `CodeWalk: Start Walkthrough` again on the same file.
-- [ ] Click the same CodeLens — panel opens instantly (no spinner, no streaming).
+- [YES ] Click any CodeLens. Wait for the explanation to finish.
+- [ YES] Reload the window (`Developer: Reload Window`).
+- [ YES] Run `CodeWalk: Start Walkthrough` again on the same file.
+- [YES ] Click the same CodeLens — panel opens instantly (no spinner, no streaming).
 
 ### Cache invalidation
 - [ ] Edit `codewalk/prompts/explanation.md` (change a rule). Bump `EXPLANATION_PROMPT_VERSION` in `src/engine/explanationAgent.ts` (e.g. `v1` → `v2`).
@@ -104,9 +104,9 @@ Run through both backend paths. Both must pass on the current commit.
 - [ ] Disable the setting. Reload. Run walkthrough. First clicks stream normally.
 
 ### Cancellation during stream
-- [ ] Click a CodeLens. While the summary is still streaming, click a different CodeLens.
-- [ ] The first panel disappears cleanly; the second begins streaming.
-- [ ] No error toast, no stack trace in the Output channel (just `[commentController]` or `[explanation] cancelled` log line).
+- [YES ] Click a CodeLens. While the summary is still streaming, click a different CodeLens.
+- [YES ] The first panel disappears cleanly; the second begins streaming.
+- [ YES] No error toast, no stack trace in the Output channel (just `[commentController]` or `[explanation] cancelled` log line).
 
 ### Auth-disable prefetch
 - [ ] Deliberately set an invalid API key (`CodeWalk: Reset API Key`, re-enter an invalid value via the wizard).
@@ -115,9 +115,9 @@ Run through both backend paths. Both must pass on the current commit.
 - [ ] No further `[prefetch] error` lines that session — the queue is quiet.
 
 ### Reset cache command
-- [ ] Run `CodeWalk: Reset Explanation Cache` from the Command Palette.
-- [ ] An info message confirms the clear.
-- [ ] Subsequent CodeLens clicks re-stream (no cache hits).
+- [YES ] Run `CodeWalk: Reset Explanation Cache` from the Command Palette.
+- [YES ] An info message confirms the clear.
+- [ YES] Subsequent CodeLens clicks re-stream (no cache hits).
 
 ### Backend / model swap
 - [ ] Switch `codewalk.backend` from one preset to another (e.g. Groq → Anthropic or vice versa) via the wizard or settings.
@@ -167,8 +167,4 @@ These pieces are already in place and Phase 2 can build on them without refactor
 - API keys are in `context.secrets` — any new code reading keys calls `getApiKey(context)`, never `configuration.get("apiKey")`.
 
 ## What's next
-1. **Optional before Phase 2:** knock out the remaining ⚠️ items on the manual verification checklist — cancellation, bad-key path, file-too-large, `showBlockHighlights` toggle, hash-id stability, prompt-edit reload. None are blockers; all would take ~30s each.
-2. **Begin Phase 2 brainstorm** (use the `superpowers:brainstorming` skill) — open questions listed above are the starting points.
-3. Write Phase 2 spec at `docs/superpowers/specs/2026-04-XX-codewalk-phase2-explanations.md`.
-4. Write Phase 2 plan at `docs/superpowers/plans/2026-04-XX-codewalk-phase2-explanations.md`.
-5. Execute Phase 2 plan step by step, updating this file at each numbered step.
+Phase 2 fixes, preparing for phase 3.

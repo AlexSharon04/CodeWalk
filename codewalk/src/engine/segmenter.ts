@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { createHash } from "node:crypto";
 import type { Segment, Difficulty } from "../types";
-import type { ChatMessage, LLMAdapter } from "../llm/adapter";
+import type { ChatMessage, JsonSchemaSpec, LLMAdapter } from "../llm/adapter";
 import { CancelledError, MalformedResponseError } from "../llm/adapter";
 import { loadPrompt } from "../prompts/loader";
 
@@ -9,6 +9,36 @@ const VALID_DIFFICULTIES = new Set<Difficulty>(["trivial", "standard", "complex"
 
 export const DEFAULT_MAX_LINES = 2000;
 export const MIN_COVERAGE_RATIO = 0.7;
+
+export const SEGMENT_JSON_SCHEMA: JsonSchemaSpec = {
+  name: "codewalk_segments",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      segments: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            oneLiner: { type: "string" },
+            startLine: { type: "integer" },
+            endLine: { type: "integer" },
+            difficulty: {
+              type: "string",
+              enum: ["trivial", "standard", "complex", "critical"],
+            },
+          },
+          required: ["label", "oneLiner", "startLine", "endLine", "difficulty"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["segments"],
+    additionalProperties: false,
+  },
+};
 
 export class FileTooLargeError extends Error {
   constructor(
@@ -90,6 +120,7 @@ export async function segment(
   try {
     firstRaw = await deps.adapter.complete(baseMessages, {
       responseFormat: "json_object",
+      jsonSchema: SEGMENT_JSON_SCHEMA,
       signal,
     });
     return finalize(parseAndValidate(firstRaw, document), document, log);
@@ -117,6 +148,7 @@ export async function segment(
     try {
       secondRaw = await deps.adapter.complete(retryMessages, {
         responseFormat: "json_object",
+        jsonSchema: SEGMENT_JSON_SCHEMA,
         signal,
       });
       return finalize(parseAndValidate(secondRaw, document), document, log);

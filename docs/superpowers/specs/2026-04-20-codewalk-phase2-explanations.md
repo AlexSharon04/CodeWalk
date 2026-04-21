@@ -679,4 +679,6 @@ Open `codewalk/test/fixtures/sample.ts`. Run `CodeWalk: Start Walkthrough`. Wait
 
 **Phase 5 — Cross-file Intelligence** is captured in `docs/POST_MVP_VISION.md`. Phase 2 preserves one hook for it — `ExplanationDeps.additionalContext?: string` — which is always `undefined` in Phase 2 and is filled by the Phase 5 symbol-context accumulator. No other Phase 2 surface changes for Phase 5 readiness.
 
+**Explanation schema redesign (in-flight Phase 2 work).** The 2026-04-20 brainstorm reshaping the `Explanation` schema (kind-tagged, `purpose`/`flow`/`uses`/`produces`/`watch` with tight caps, PTC collapsed into `watch`) is preserved verbatim in [`docs/superpowers/specs/2026-04-20-codewalk-phase2-explanation-schema-brainstorm.md`](2026-04-20-codewalk-phase2-explanation-schema-brainstorm.md). Supersedes §6.2 / §7 contents once landed. Re-read before editing `Explanation` or `explanation.md`.
+
 Other post-MVP ideas (difficulty color coding on CodeLens labels themselves, walkthrough summary at completion, export as Markdown, difficulty-based filtering) remain deferred to Phase 4 or later per `IMPLEMENTATION_PLAN.md`.

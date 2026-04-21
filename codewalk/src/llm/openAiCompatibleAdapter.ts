@@ -24,38 +24,20 @@ interface ChatResponseBody {
   choices?: Array<{ message?: { content?: string } }>;
 }
 
-// Hardcoded here until Phase 2 introduces a second schema and forces a proper
-// per-call `jsonSchema` option on CompleteOptions. Groq's newer models reject
-// `response_format: {type: "json_object"}` and require this strict form.
-const SEGMENT_JSON_SCHEMA = {
-  name: "codewalk_segments",
-  strict: true,
-  schema: {
-    type: "object",
-    properties: {
-      segments: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            label: { type: "string" },
-            oneLiner: { type: "string" },
-            startLine: { type: "integer" },
-            endLine: { type: "integer" },
-            difficulty: {
-              type: "string",
-              enum: ["trivial", "standard", "complex", "critical"],
-            },
-          },
-          required: ["label", "oneLiner", "startLine", "endLine", "difficulty"],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ["segments"],
-    additionalProperties: false,
-  },
-} as const;
+function buildResponseFormat(
+  mode: "json_object" | "json_schema",
+  jsonSchema: CompleteOptions["jsonSchema"],
+): Record<string, unknown> {
+  if (mode === "json_schema") {
+    if (!jsonSchema) {
+      throw new Error(
+        "OpenAICompatibleAdapter: structuredOutputMode=json_schema requires options.jsonSchema to be provided by the caller.",
+      );
+    }
+    return { type: "json_schema", json_schema: jsonSchema };
+  }
+  return { type: "json_object" };
+}
 
 async function* parseSseStream(
   response: Response,
@@ -142,10 +124,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       // Groq's default llama-3.3-70b only accepts json_object, and Ollama/OpenAI/others
       // accept either. The preset resolves the right choice and passes it here.
       const mode = this.cfg.structuredOutputMode ?? "json_object";
-      body.response_format =
-        mode === "json_schema"
-          ? { type: "json_schema", json_schema: SEGMENT_JSON_SCHEMA }
-          : { type: "json_object" };
+      body.response_format = buildResponseFormat(mode, options.jsonSchema);
     }
 
     let response: Response;
@@ -212,10 +191,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     };
     if (options?.responseFormat === "json_object") {
       const mode = this.cfg.structuredOutputMode ?? "json_object";
-      body.response_format =
-        mode === "json_schema"
-          ? { type: "json_schema", json_schema: SEGMENT_JSON_SCHEMA }
-          : { type: "json_object" };
+      body.response_format = buildResponseFormat(mode, options.jsonSchema);
     }
 
     const signal = options.signal;
