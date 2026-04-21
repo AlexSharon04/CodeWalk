@@ -50,3 +50,7 @@ C
 first for this: "The current streaming is already half-broken per your Phase 2 checklist notes ("Analyzing… static,   
   then comes all at once"). That's likely a re-render debounce bug in the CommentController or chunk
   buffering in the adapter — either way, it's work we'd need to pay for if we keep streaming." : this is wrong, it was reverted and appers in a few chunks the short paragraph and then everything else after a dynamically loading animation (both working). I really i like that i can see the elasped seconds with the . .. ... loading, but also really liked the typewriter feel. rememebr this is going to be used by programmers who sit on their computer a lot, its nice for it to have a good feel to it ya know. what are we thining here any thoughts
+
+---
+
+yeah you right move on
