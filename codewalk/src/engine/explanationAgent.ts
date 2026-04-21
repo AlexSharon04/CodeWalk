@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { Explanation, Segment, Concept } from "../types";
-import type { LLMAdapter, ChatMessage } from "../llm/adapter";
+import type { JsonSchemaSpec, LLMAdapter, ChatMessage } from "../llm/adapter";
 import {
   CancelledError,
   MalformedResponseError,
@@ -10,9 +10,45 @@ import {
 } from "../llm/adapter";
 import { loadPrompt } from "../prompts/loader";
 
-export const EXPLANATION_PROMPT_VERSION = "v1";
+export const EXPLANATION_PROMPT_VERSION = "v2";
 export const DEFAULT_MAX_SEGMENT_LINES = 400;
 export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 60_000;
+
+export const EXPLANATION_JSON_SCHEMA: JsonSchemaSpec = {
+  name: "codewalk_explanation",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      summary: { type: "string" },
+      pointsToConsider: {
+        type: "object",
+        properties: {
+          assumptions: { type: "array", items: { type: "string" } },
+          dangers: { type: "array", items: { type: "string" } },
+          sideEffects: { type: "array", items: { type: "string" } },
+        },
+        required: ["assumptions", "dangers", "sideEffects"],
+        additionalProperties: false,
+      },
+      concepts: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            briefExplainer: { type: "string" },
+            relevance: { type: "string" },
+          },
+          required: ["name", "briefExplainer", "relevance"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["summary", "pointsToConsider", "concepts"],
+    additionalProperties: false,
+  },
+};
 
 const SUMMARY_RE = /"summary"\s*:\s*"((?:[^"\\]|\\.)*)/;
 
@@ -148,7 +184,6 @@ export async function explain(
 
   let firstRaw: string | undefined;
   let firstReason: string | undefined;
-  const useJsonSchema = deps.structuredOutputMode === "json_schema";
   let retryFired = false;
   const startMs = Date.now();
 
@@ -171,20 +206,39 @@ export async function explain(
       const tokenSub = deps.token?.onCancellationRequested(() => ac.abort());
       let buffer = "";
       let lastEmittedLength = 0;
+      // DIAG(bug-A): remove after Phase 2 streaming verified.
+      const streamStartMs = Date.now();
+      let chunkCount = 0;
+      let partialCount = 0;
+      let firstChunkMs: number | undefined;
+      let firstPartialMs: number | undefined;
       try {
         const stream = deps.adapter.completeStream(messages, {
-          responseFormat: useJsonSchema ? "json_object" : "json_object",
+          responseFormat: "json_object",
+          jsonSchema: EXPLANATION_JSON_SCHEMA,
           signal: ac.signal,
           idleTimeoutMs,
         });
+        deps.logger?.(`[explain-diag] stream opened segmentId=${segment.id}`);
         for await (const chunk of streamWithIdleTimeout(stream, idleTimeoutMs, ac.signal)) {
+          chunkCount++;
+          if (firstChunkMs === undefined) firstChunkMs = Date.now() - streamStartMs;
           buffer += chunk;
           const partial = extractPartialSummary(buffer);
           if (partial !== undefined && partial.length > lastEmittedLength) {
+            partialCount++;
+            if (firstPartialMs === undefined) firstPartialMs = Date.now() - streamStartMs;
+            deps.logger?.(`[explain-diag] partial #${partialCount} ms=${Date.now() - streamStartMs} len=${partial.length}`);
             deps.onPartial({ summary: partial });
             lastEmittedLength = partial.length;
           }
         }
+        deps.logger?.(
+          `[explain-diag] stream closed segmentId=${segment.id} totalMs=${Date.now() - streamStartMs} `
+          + `chunks=${chunkCount} partials=${partialCount} `
+          + `firstChunkMs=${firstChunkMs ?? -1} firstPartialMs=${firstPartialMs ?? -1} `
+          + `bufferLen=${buffer.length}`,
+        );
         raw = buffer;
       } catch (err) {
         if (tokenSub) tokenSub.dispose();
@@ -200,12 +254,12 @@ export async function explain(
     } else {
       raw = await deps.adapter.complete(
         messages,
-        { responseFormat: useJsonSchema ? "json_object" : "json_object" },
+        { responseFormat: "json_object", jsonSchema: EXPLANATION_JSON_SCHEMA },
       );
     }
 
     try {
-      const validated = validateResponse(raw, segment);
+      const validated = validateResponse(raw, segment, deps.logger);
       const modelTimeMs = Date.now() - startMs;
       const prefix = retryFired ? "[explanation] WARN" : "[explanation]";
       deps.logger?.(
@@ -225,6 +279,8 @@ export async function explain(
       };
     } catch (err) {
       if (err instanceof ValidationFailure) {
+        // DIAG(bug-C): remove after Phase 2 Anthropic path verified.
+        deps.logger?.(`[explain-diag] validation failed attempt=${attempt} reason="${err.message}" rawPrefix=${JSON.stringify(raw.slice(0, 300))}`);
         if (attempt === 0) {
           firstRaw = raw;
           firstReason = err.message;
@@ -260,7 +316,7 @@ function guessLanguage(segment: Segment): string {
   return (segment as unknown as { languageId?: string }).languageId ?? "text";
 }
 
-function validateResponse(raw: string, segment: Segment): {
+function validateResponse(raw: string, segment: Segment, logger?: ExplanationLogger): {
   summary: string;
   pointsToConsider: Explanation["pointsToConsider"];
   concepts: Concept[];
@@ -287,14 +343,28 @@ function validateResponse(raw: string, segment: Segment): {
   };
 
   const conceptsRaw = Array.isArray(obj.concepts) ? obj.concepts : [];
+  // DIAG(bug-B): remove after Phase 2 concepts rendering verified.
+  logger?.(`[explain-diag] concepts raw count: ${conceptsRaw.length}; rawKeys=${JSON.stringify(conceptsRaw.map((c: any) => (c && typeof c === "object") ? Object.keys(c) : typeof c))}`);
   const concepts: Concept[] = [];
   const seen = new Set<string>();
   for (const c of conceptsRaw) {
-    if (!c || typeof (c as any).name !== "string" || (c as any).name.length === 0) continue;
-    if (typeof (c as any).briefExplainer !== "string" || (c as any).briefExplainer.length === 0) continue;
-    if (typeof (c as any).relevance !== "string" || (c as any).relevance.length === 0) continue;
+    if (!c || typeof (c as any).name !== "string" || (c as any).name.length === 0) {
+      logger?.(`[explain-diag] concept dropped: missing/empty name; raw=${JSON.stringify(c).slice(0, 200)}`);
+      continue;
+    }
+    if (typeof (c as any).briefExplainer !== "string" || (c as any).briefExplainer.length === 0) {
+      logger?.(`[explain-diag] concept dropped: missing/empty briefExplainer; name="${(c as any).name}"`);
+      continue;
+    }
+    if (typeof (c as any).relevance !== "string" || (c as any).relevance.length === 0) {
+      logger?.(`[explain-diag] concept dropped: missing/empty relevance; name="${(c as any).name}"`);
+      continue;
+    }
     const key = (c as any).name.trim().toLowerCase();
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      logger?.(`[explain-diag] concept dropped: duplicate name="${(c as any).name}"`);
+      continue;
+    }
     seen.add(key);
     concepts.push({
       name: (c as any).name,
