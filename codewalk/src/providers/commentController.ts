@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { SegmentStore } from "../engine/segmentStore";
 import type { ExplanationStore } from "../engine/explanationStore";
 import type { PrefetchQueue } from "../engine/prefetchQueue";
+import type { WalkSession } from "../services/walkSession";
 import type { Explanation, Segment } from "../types";
 import type { ExplanationDeps } from "../engine/explanationAgent";
 import { explain } from "../engine/explanationAgent";
@@ -24,6 +25,7 @@ export interface CommentControllerDeps {
   readonly structuredOutputMode?: ExplanationDeps["structuredOutputMode"];
   readonly prefetchQueue?: PrefetchQueue;
   readonly prefetchNeighborsOnClick?: boolean;
+  readonly walkSession?: WalkSession;
 }
 
 class CodeWalkComment implements vscode.Comment {
@@ -140,6 +142,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
     thread.comments = [new CodeWalkComment(new vscode.MarkdownString("_Analyzing…_"))];
     this.openThread = thread;
     this.openSegment = segment;
+    this.deps.walkSession?.setActive(uri, segment.id);
 
     // Cache hit?
     const cached = this.expStore.get(segmentId, this.deps.preset, this.deps.promptVersion);

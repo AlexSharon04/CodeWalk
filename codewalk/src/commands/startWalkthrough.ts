@@ -17,11 +17,13 @@ import {
   ExplanationStreamError,
 } from "../engine/explanationAgent";
 import { runFirstRunWizard } from "./firstRunWizard";
+import type { WalkSession } from "../services/walkSession";
 
 export function registerStartWalkthrough(
   context: vscode.ExtensionContext,
   store: SegmentStore,
   output: vscode.OutputChannel,
+  walkSession?: WalkSession,
 ): vscode.Disposable {
   return vscode.commands.registerCommand("codewalk.startWalkthrough", async () => {
     const editor = vscode.window.activeTextEditor;
@@ -91,6 +93,10 @@ export function registerStartWalkthrough(
           });
           store.set(document.uri, segments);
           output.appendLine(`[success] ${segments.length} segments for ${document.fileName}`);
+          // Seed the walk session with this file. Sidebar (Phase 3 step 10) can extend
+          // the queue; for now, single-file walkthroughs preserve Phase 1/2 demo flow.
+          walkSession?.addFile(document.uri);
+          walkSession?.start();
         } catch (e) {
           handleError(e, output);
         }

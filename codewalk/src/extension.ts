@@ -8,6 +8,7 @@ import { ExplanationStore } from "./engine/explanationStore";
 import { EXPLANATION_PROMPT_VERSION } from "./engine/explanationAgent";
 import { CodeWalkCommentController } from "./providers/commentController";
 import { PrefetchQueue } from "./engine/prefetchQueue";
+import { WalkSession } from "./services/walkSession";
 import { readUserConfig } from "./utils/config";
 import { resolveBackend } from "./llm/presets";
 import { OpenAICompatibleAdapter } from "./llm/openAiCompatibleAdapter";
@@ -23,13 +24,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const lensProvider = new CodeWalkLensProvider(store);
   const highlighter = new BlockHighlighter(store);
+  const walkSession = new WalkSession(store);
 
   const lensRegistration = vscode.languages.registerCodeLensProvider(
     { scheme: "file" },
     lensProvider,
   );
 
-  const startCommand = registerStartWalkthrough(context, store, output);
+  const startCommand = registerStartWalkthrough(context, store, output, walkSession);
 
   // Logger for modules that need structured output.
   const logger = (msg: string) => output.appendLine(msg);
@@ -98,6 +100,7 @@ export function activate(context: vscode.ExtensionContext): void {
         structuredOutputMode: resolved.structuredOutputMode,
         prefetchQueue,
         prefetchNeighborsOnClick,
+        walkSession,
       },
     );
 
@@ -179,6 +182,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     store,
+    walkSession,
     lensProvider,
     highlighter,
     lensRegistration,
