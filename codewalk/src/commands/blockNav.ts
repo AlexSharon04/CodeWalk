@@ -29,9 +29,13 @@ export function registerBlockNavCommands(
   });
 
   const skip = vscode.commands.registerCommand("codewalk.skipFile", async () => {
+    const queueSizeBefore = walkSession.state().fileQueue.length;
     const target = walkSession.skipFile();
     if (!target) {
-      vscode.window.showInformationMessage("CodeWalk: walkthrough complete.");
+      const message = queueSizeBefore <= 1
+        ? "CodeWalk: only file in the queue. Add more files in the CodeWalk sidebar to walk multiple files."
+        : "CodeWalk: walkthrough complete.";
+      vscode.window.showInformationMessage(message);
       return;
     }
     await navigateTo(context, walkSession, segStore, output, target, +1);

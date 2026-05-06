@@ -162,7 +162,11 @@ export class WalkSession implements vscode.Disposable {
     const uri = this.activeFile();
     if (!uri) return undefined;
     const segs = this.segStore.get(uri);
-    if (!segs || segs.length === 0) return undefined;
+    if (!segs || segs.length === 0) {
+      // Next file isn't segmented yet — same placeholder shape as computeStep so
+      // blockNav can trigger segmentation on demand.
+      return { uri, segmentId: "", blockIndex: -1, fileIndex: this.activeFileIndex };
+    }
     return { uri, segmentId: segs[0]!.id, blockIndex: 0, fileIndex: this.activeFileIndex };
   }
 

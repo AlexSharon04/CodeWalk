@@ -188,6 +188,25 @@ suite("WalkSession", () => {
     store.dispose();
   });
 
+  test("skipFile returns a placeholder target when next file is unsegmented", () => {
+    const store = new SegmentStore();
+    const ws = new WalkSession(store);
+    const a = vscode.Uri.file("/tmp/a.ts");
+    const b = vscode.Uri.file("/tmp/b.ts");
+    store.set(a, [seg("a1", 1)]);
+    // b has no segments yet
+    ws.setQueue([a, b]);
+    ws.setActive(a, "a1");
+    const target = ws.skipFile();
+    assert.ok(target, "skipFile must not return undefined when queue still has files");
+    assert.strictEqual(target!.uri.toString(), b.toString());
+    assert.strictEqual(target!.segmentId, "");
+    assert.strictEqual(target!.blockIndex, -1);
+    assert.strictEqual(ws.state().fileQueue.length, 1);
+    ws.dispose();
+    store.dispose();
+  });
+
   test("skipFile on the only file ends the session", () => {
     const store = new SegmentStore();
     const ws = new WalkSession(store);
