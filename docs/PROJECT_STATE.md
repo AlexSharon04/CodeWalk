@@ -1,9 +1,9 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-05-06
-**Current phase:** Phase 2c + Phase 3 nav — **code complete, manual verification pending**
-**Current branch:** `phase2c-narrative-and-nav`
-**Current step:** All 12 steps of the Phase 2c plan are committed. Verification gate before merge to `main`: run the manual checklist below in the Extension Development Host and verify on both Anthropic and Groq presets per ADR-003.
+**Last updated:** 2026-05-06 (session end)
+**Current phase:** Phase 2c + Phase 3 nav — **code complete, two post-walkthrough UX fixes shipped, final sprint queued**
+**Current branch:** `phase2c-narrative-and-nav` (11 commits ahead of `phase1-core-loop`)
+**Current step:** Branch is ready to merge once manual verification on both Anthropic and Groq presets passes. Final sprint (Phase 4 + UX polish raised this session) is queued for the next session — see "Final sprint scope" below.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
@@ -136,6 +136,10 @@ None for Phase 1 closure. Phase 2 spec will open the following:
 - Visual signal for "only one panel open at a time".
 
 ## Recent decisions
+- **2026-05-06** — **Phase 2c + Phase 3 nav slice shipped.** Twelve-step plan landed in 11 commits on `phase2c-narrative-and-nav`. Highlights: (1) Single-narrative v3 schema replacing the 6-field kind-aware v2 — `summary` only, prose 3–5 sentences, eliminates the broken `<details>` Concepts render and the over-padded watch/produces fields. Net -500 lines on the schema/agent/renderer. (2) Adjacent-block prefetch with 200 ms throttle/merge so rapid Alt+↑/↓ stepping doesn't spawn N cancelled batches. (3) Phase 3 nav in full: `WalkSession` service, Alt+↓/↑/S keybindings, status bar progress indicator, sidebar TreeView with checkbox-toggle queue, cross-file auto-segmentation via shared `segmentFileForWalk` helper. Trivial pre-population (Phase 2b) removed — click-time `synthesizeTrivial` short-circuit kept so trivial blocks still feel instant.
+- **2026-05-06** — **Phase 5 `uses`-text-to-link seam dropped.** v3 single-narrative collapses the entire structured schema; `uses: string[]` no longer exists. POST_MVP_VISION.md updated with two paths for the Phase 5 spec to reintroduce structure: (a) add a `references` field alongside `summary`, or (b) inline command-URI links inside the prose. Path (a) is cleaner; (b) is cheaper.
+- **2026-05-06** — **Start CodeWalk made queue-aware.** Originally Start CodeWalk only segmented `activeTextEditor.document.uri`, which made multi-file walkthroughs impossible to construct from the sidebar checkboxes (queue formed but never had multiple segmented files). Now: queue takes precedence (segments first un-segmented queued file), falls back to active editor for the single-file demo flow, and surfaces a self-explanatory hint when neither is available. Sidebar gained a Start title-bar button + `viewsWelcome` for discoverability.
+- **2026-05-06** — **`vscode-test` runner wedged on Win11 + VS Code 1.119.0.** Fresh-extracted archive triggers VS Code's staged-update false-positive at launch. Code correctness verified via `npx tsc --noEmit` + `npm run build` (both clean) and F5 Extension Development Host. Not a code regression — environment-only. Document so future sessions don't waste time debugging.
 - **2026-04-20** — **Phase 2b — adaptive kind-aware explanation schema.** Replaced v1 `summary` + PTC arrays with a flat v2 schema: `kind ∈ {trivial, logic, io}` + `purpose` + `flow` + `uses` + `produces` + `watch` + `concepts`. Trivial-difficulty segments short-circuit the LLM (synthesized locally from `segment.oneLiner`) and are pre-populated into the cache at segmentation time. `EXPLANATION_PROMPT_VERSION` bumped v1 → v2; existing `ExplanationStore.rehydrate` sweep evicts v1 entries on first activation. See `docs/superpowers/specs/2026-04-20-codewalk-phase2b-adaptive-explanation.md` and plan in `docs/superpowers/plans/2026-04-20-codewalk-phase2b-adaptive-explanation.md`.
 - **2026-04-20** — **Phase 2 brainstorm completed.** Spec drafted at `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md`. Key calls: (1) Full Level 1 scope per design-doc §4.1 — summary + Points to Consider (assumptions, dangers, sideEffects) + tagged Concepts — in one agent call, one schema. (2) Cache keyed `${preset}:${promptVersion}:${segmentId}` and persisted in `ExtensionContext.globalState` — cross-project sharing intentional; content-hash segment ids (ADR-005 addendum) give natural invalidation. (3) Streaming always-on for the `summary` field via a new streaming path on `OpenAICompatibleAdapter`; lists (PTC, concepts) render atomically at stream end. (4) Prefetch opt-in via `codewalk.explanation.prefetchOnSegmentation` (default `false`), session-wide disable on `AuthError`, concurrency 2. (5) `CommentController` with `<details>` Concepts block, re-click-to-toggle, no auto-expand of first block. (6) Stream-idle timeout 60s. (7) One Phase 5 seam preserved: `ExplanationDeps.additionalContext?: string` — always `undefined` in Phase 2.
 - **2026-04-20** — **Post-MVP vision doc created.** New `docs/POST_MVP_VISION.md` sibling to `IMPLEMENTATION_PLAN.md`, capturing Phase 5 (Cross-file Intelligence) design in three layers: static dependency graph (tree-sitter, zero LLM cost), symbol-context accumulator (working memory grows as user walks), abnormality detection (prompt-level rule activated when ≥2 sightings exist). Walk-trail + jump-to-definition UX sketched. Rationale: user-raised idea during brainstorm; too large for Phase 2 scope; worth preserving because it's the first feature in the roadmap that's unambiguously agentic rather than LLM-wrapper.
@@ -244,6 +248,42 @@ All twelve steps of the Phase 2c plan landed on `phase2c-narrative-and-nav`:
 
 19. Verify the full flow once on Anthropic and once on Groq per ADR-003 dogfood warning.
 
-### Phase 4 (next)
+### Late-session fixes (2026-05-06)
 
-Once the checklist is green, Phase 4 (Level 2 line-by-line annotations + polish — see `docs/IMPLEMENTATION_PLAN.md`) is the next slice. The current branch can merge to `main` then. Until then, hold the branch.
+Two issues surfaced once the user F5-tested the Phase 3 nav slice. Both are fixed on the same branch:
+
+| Commit | Bug | Fix |
+|---|---|---|
+| `f32ff56` | Alt+S to a queued-but-unsegmented next file collapsed to "walkthrough complete" | `firstBlockOfActive` returns a placeholder NavTarget (segmentId="") matching `computeStep`'s shape; blockNav's existing placeholder branch triggers segmentation and lands the user. Toast also distinguishes "only file in queue → check more in the sidebar" from "true end of walkthrough." |
+| `e76892d` | Start CodeWalk only segmented `vscode.window.activeTextEditor`, ignoring sidebar checkboxes — so multi-file queues never formed naturally and Alt+S had nothing to advance to | Start CodeWalk now consults `WalkSession.fileQueue` first; segments the first un-segmented queued file; falls back to the active editor when the queue is empty. Sidebar gains a Start CodeWalk title-bar action and a `viewsWelcome` empty-state hint teaching the workflow. |
+
+### Final sprint scope (next session)
+
+Two layers — Phase 4 (planned) and UX-polish backlog (raised this session). Both can be one slice or split.
+
+#### Phase 4 — Level 2 & polish (per `docs/IMPLEMENTATION_PLAN.md` §Phase 4)
+
+1. **"Show Line-by-Line" button** on the comment thread title bar via `CommentThread.contextValue` + a menu contribution. Opt-in only — block-level Level 1 panels stay the default.
+2. **Per-line `after.contentText` decorations.** ONE `TextEditorDecorationType` reused across lines (per-line types are the #1 leak in VS Code extensions — design-doc §12.5). Annotation source is a new agent prompt at `prompts/lineByLine.md` following the ADR-005 contract.
+3. **`HoverProvider`** bound to the same per-line ranges, returning the full per-line story. Markdown body, no command-URI links yet.
+4. **Difficulty colors on CodeLens labels themselves** (currently only on backgrounds). Match the four `BlockHighlighter` colors via themed title strings; verify on both light and dark themes.
+5. **Full dispose lifecycle on walkthrough end.** A new `codewalk.endWalkthrough` command + `WalkSession.end()` now exists but isn't bound to a clean dispose-everything path — Phase 4 wires the session-scoped object that owns transient state (decorations, threads, status bar item visibility, sidebar reset).
+
+#### UX backlog from 2026-05-06 user testing
+
+These came up while smoke-testing Phase 2c+3. Phase 4 sprint should fold them in.
+
+- **Background pre-segmentation** of all checked sidebar files. New setting `codewalk.preSegmentQueuedFiles` (default `false`). When `true`, after the first file finishes segmenting, fire `segmentFileForWalk` for the rest of the queue in fire-and-forget mode (no progress notification — pipe to a non-modal status-bar spinner). User explicitly raised "while the user is looking at the code, the LLM is generating in the background" as desired behavior.
+- **Sidebar segmentation status indicator.** Each row in the file-queue tree shows whether the file is segmented (✓), in-progress (spinner via `ThemeIcon("loading~spin")`), or unsegmented (○). Currently the checkbox tells you only "in queue or not" — segmentation status is invisible.
+- **End walkthrough command.** Bind `codewalk.endWalkthrough` to a sidebar title action and the command palette so users can cleanly exit the walkthrough state (`codewalk.active = false`, decorations disposed, status bar hidden, queue cleared optionally).
+- **`onDidChangeActiveTextEditor` listener** that calls `walkSession.setActive(uri, undefined)` when the user manually clicks into a different editor tab whose URI is already in the queue. The status bar would then track the user's actual focus instead of waiting for a CodeLens click.
+- **Status bar default-on hint.** First-run, if `codewalk.active` becomes true while the status bar is hidden in workbench settings, surface a one-time toast "CodeWalk shows progress in the status bar — enable via View → Appearance → Show Status Bar." User got bitten by a hidden status bar this session.
+- **Per-file dispose policy revisit.** Original Phase 3 spec said "dispose previous file's threads + decorations on advance." Current implementation keeps decorations as breadcrumbs (so Alt+↑ can navigate back without re-segmenting). Either re-confirm the breadcrumbs decision or wire dispose-on-advance — needs a UX call from the user.
+
+#### Verification
+
+Manual checklist for Phase 2c+3 above is the regression bar. Phase 4 will append its own checklist (line-by-line render, hover content, decoration-leak smoke test on a 500-line file, dispose verification on End Walkthrough).
+
+#### Known environmental issue
+
+`vscode-test` runner is wedged on this Win11 machine (VS Code 1.119.0 staged-update false-positive on fresh-extracted archives). `npx tsc --noEmit` and `npm run build` both run clean — code correctness is verifiable without the launcher. F5 Extension Development Host works for manual testing.
