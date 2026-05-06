@@ -3,3 +3,7 @@ looking good keep chugging
 ---
 
 where am i supposed to be seeing the status bar
+
+---
+
+status bar was not enabled. how alt switching working. but notice that alt s doesnt really do anything since only 1 file can be open in codewalk at once
