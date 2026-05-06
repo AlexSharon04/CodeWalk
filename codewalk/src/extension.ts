@@ -10,6 +10,7 @@ import { EXPLANATION_PROMPT_VERSION } from "./engine/explanationAgent";
 import { CodeWalkCommentController } from "./providers/commentController";
 import { PrefetchQueue } from "./engine/prefetchQueue";
 import { WalkSession } from "./services/walkSession";
+import { CodeWalkStatusBar } from "./services/statusBar";
 import { readUserConfig } from "./utils/config";
 import { resolveBackend } from "./llm/presets";
 import { OpenAICompatibleAdapter } from "./llm/openAiCompatibleAdapter";
@@ -26,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const lensProvider = new CodeWalkLensProvider(store);
   const highlighter = new BlockHighlighter(store);
   const walkSession = new WalkSession(store);
+  const statusBar = new CodeWalkStatusBar(walkSession, store);
 
   const lensRegistration = vscode.languages.registerCodeLensProvider(
     { scheme: "file" },
@@ -185,6 +187,7 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     store,
     walkSession,
+    statusBar,
     lensProvider,
     highlighter,
     lensRegistration,
