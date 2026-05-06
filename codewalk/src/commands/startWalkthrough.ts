@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "node:path";
 import { readUserConfig } from "../utils/config";
 import { resolveBackend } from "../llm/presets";
 import { isOllamaReachable } from "../llm/ollamaDetection";
@@ -14,19 +15,37 @@ export function registerStartWalkthrough(
   walkSession?: WalkSession,
 ): vscode.Disposable {
   return vscode.commands.registerCommand("codewalk.startWalkthrough", async () => {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      vscode.window.showInformationMessage("Open a file first to start CodeWalk.");
+    // Decide what to segment next. Order of precedence:
+    //   1. The first un-segmented file in the WalkSession queue (set by sidebar checkboxes).
+    //   2. The active editor's file, if any — preserves the single-file demo flow when the
+    //      sidebar hasn't been used.
+    const targetUri = pickTargetUri(walkSession, store);
+
+    if (!targetUri) {
+      vscode.window.showInformationMessage(
+        "CodeWalk: open a file or check files in the CodeWalk sidebar to start a walkthrough.",
+      );
       return;
     }
-    const document = editor.document;
+
+    let document: vscode.TextDocument;
+    try {
+      document = await vscode.workspace.openTextDocument(targetUri);
+    } catch (e) {
+      vscode.window.showErrorMessage(
+        `CodeWalk couldn't open ${path.basename(targetUri.fsPath)}: ${(e as Error).message}`,
+      );
+      return;
+    }
     if (document.getText().trim().length === 0) {
-      vscode.window.showInformationMessage("This file is empty — nothing to walk through.");
+      vscode.window.showInformationMessage(
+        `${path.basename(targetUri.fsPath)} is empty — nothing to walk through.`,
+      );
       return;
     }
 
     // Resolve backend / fire wizard if needed. segmentFileForWalk also resolves
-    // backend, but it doesn't run the wizard — Start CodeWalk is the wizard's
+    // backend but doesn't run the wizard — Start CodeWalk is the wizard's
     // entry point, so we handle it here.
     const userConfig = await readUserConfig(context);
     let resolved;
@@ -56,12 +75,34 @@ export function registerStartWalkthrough(
       }
     }
 
+    // Surface the target file in the editor so the user sees where the walkthrough is
+    // about to land — important when the target came from the sidebar queue rather
+    // than the active editor.
+    await vscode.window.showTextDocument(document, { preview: false });
+
     const result = await segmentFileForWalk(context, store, output, document.uri);
-    if (result.ok) {
-      walkSession?.addFile(document.uri);
-      walkSession?.start();
-    }
+    if (!result.ok) return;
+
+    // setActive both auto-adds (if missing from queue) and switches activeFileIndex,
+    // so the status bar / sidebar reflect the freshly-segmented file as the user's
+    // current focus regardless of how this Start was triggered.
+    walkSession?.setActive(document.uri, undefined);
+    walkSession?.start();
   });
+}
+
+function pickTargetUri(
+  walkSession: WalkSession | undefined,
+  store: SegmentStore,
+): vscode.Uri | undefined {
+  const queue = walkSession?.state().fileQueue ?? [];
+  for (const queuedUri of queue) {
+    const segs = store.get(queuedUri);
+    if (!segs || segs.length === 0) return queuedUri;
+  }
+  // Queue is empty or fully segmented — fall back to active editor for single-file flow
+  // and for "I want to add this open file to the walk" gesture.
+  return vscode.window.activeTextEditor?.document.uri;
 }
 
 function showSettingsError(message: string): void {

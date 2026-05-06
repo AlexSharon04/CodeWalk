@@ -39,12 +39,23 @@
     "menus": {
       "view/title": [
         {
+          "command": "codewalk.startWalkthrough",
+          "when": "view == codewalk.fileQueue",
+          "group": "navigation@1"
+        },
+        {
           "command": "codewalk.refreshFileQueue",
           "when": "view == codewalk.fileQueue",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "codewalk.fileQueue",
+        "contents": "Pick the files you want to walk through, then run **Start CodeWalk**.\n\n[Start CodeWalk](command:codewalk.startWalkthrough)\n\nUse Alt+↓ / Alt+↑ to step through blocks. At the last block of a file, Alt+↓ auto-segments the next checked file. Alt+S skips the current file."
+      }
+    ],
     "keybindings": [
       {
         "command": "codewalk.nextBlock",
