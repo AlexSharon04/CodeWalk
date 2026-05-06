@@ -1,0 +1,23 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "ac004858030a",
+  "strategy": "manual-commit",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 1,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/ac/004858030a/0/metadata.json",
+      "transcript": "/ac/004858030a/0/full.jsonl",
+      "content_hash": "/ac/004858030a/0/content_hash.txt",
+      "prompt": "/ac/004858030a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 14,
+    "cache_creation_tokens": 24526,
+    "cache_read_tokens": 2588952,
+    "output_tokens": 18820,
+    "api_call_count": 9
+  }
+}
