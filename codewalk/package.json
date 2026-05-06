@@ -23,8 +23,28 @@
       { "command": "codewalk.resetExplanationCache", "title": "CodeWalk: Reset Explanation Cache" },
       { "command": "codewalk.nextBlock", "title": "CodeWalk: Next Block" },
       { "command": "codewalk.prevBlock", "title": "CodeWalk: Previous Block" },
-      { "command": "codewalk.skipFile", "title": "CodeWalk: Skip File" }
+      { "command": "codewalk.skipFile", "title": "CodeWalk: Skip File" },
+      { "command": "codewalk.refreshFileQueue", "title": "CodeWalk: Refresh File List", "icon": "$(refresh)" }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "codewalk", "title": "CodeWalk", "icon": "$(book)" }
+      ]
+    },
+    "views": {
+      "codewalk": [
+        { "id": "codewalk.fileQueue", "name": "Walkthrough Files", "icon": "$(book)" }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "codewalk.refreshFileQueue",
+          "when": "view == codewalk.fileQueue",
+          "group": "navigation"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "codewalk.nextBlock",

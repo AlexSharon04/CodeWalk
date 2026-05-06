@@ -11,6 +11,7 @@ import { CodeWalkCommentController } from "./providers/commentController";
 import { PrefetchQueue } from "./engine/prefetchQueue";
 import { WalkSession } from "./services/walkSession";
 import { CodeWalkStatusBar } from "./services/statusBar";
+import { FileQueueProvider } from "./views/fileQueueProvider";
 import { readUserConfig } from "./utils/config";
 import { resolveBackend } from "./llm/presets";
 import { OpenAICompatibleAdapter } from "./llm/openAiCompatibleAdapter";
@@ -28,6 +29,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const highlighter = new BlockHighlighter(store);
   const walkSession = new WalkSession(store);
   const statusBar = new CodeWalkStatusBar(walkSession, store);
+  const fileQueueProvider = new FileQueueProvider(walkSession);
+  const fileQueueView = vscode.window.createTreeView("codewalk.fileQueue", {
+    treeDataProvider: fileQueueProvider,
+    canSelectMany: false,
+    showCollapseAll: false,
+  });
+  fileQueueView.onDidChangeCheckboxState((e) => {
+    for (const [item, state] of e.items) {
+      fileQueueProvider.toggleCheckbox(item.uri, state);
+    }
+  });
+  const fileQueueRefreshCommand = vscode.commands.registerCommand(
+    "codewalk.refreshFileQueue",
+    () => fileQueueProvider.refreshWorkspaceFiles(),
+  );
 
   const lensRegistration = vscode.languages.registerCodeLensProvider(
     { scheme: "file" },
@@ -188,6 +204,9 @@ export function activate(context: vscode.ExtensionContext): void {
     store,
     walkSession,
     statusBar,
+    fileQueueProvider,
+    fileQueueView,
+    fileQueueRefreshCommand,
     lensProvider,
     highlighter,
     lensRegistration,
