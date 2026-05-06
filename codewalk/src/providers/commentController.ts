@@ -272,27 +272,33 @@ function renderExplanation(exp: Explanation): vscode.MarkdownString {
   }
 
   if (exp.flow.length) {
-    md.appendMarkdown(`\n\n**Flow**\n${exp.flow.map(s => `- ${s}`).join("\n")}`);
+    md.appendMarkdown(`\n\n**Flow**\n\n${exp.flow.map(s => `- ${s}`).join("\n")}`);
   }
   if (exp.uses.length) {
-    const items = exp.uses.map(s => `\`${s}\``).join(" · ");
-    md.appendMarkdown(`\n\n**Uses** · ${items}`);
+    // v2-schema items are descriptive phrases ("symbol — why"). The inline `·` separator
+    // gets lost inside em-dashes, so render as a bullet list for readability.
+    md.appendMarkdown(`\n\n**Uses**\n\n${exp.uses.map(s => `- ${s}`).join("\n")}`);
   }
   if (exp.produces.length) {
-    const items = exp.produces.join(" · ");
-    md.appendMarkdown(`\n\n**Produces** · ${items}`);
+    md.appendMarkdown(`\n\n**Produces**\n\n${exp.produces.map(s => `- ${s}`).join("\n")}`);
   }
   if (exp.watch.length) {
-    md.appendMarkdown(`\n\n**Watch**\n${exp.watch.map(s => `- ${s}`).join("\n")}`);
+    md.appendMarkdown(`\n\n**Watch**\n\n${exp.watch.map(s => `- ${s}`).join("\n")}`);
   }
   if (exp.concepts.length) {
+    // VS Code's hover markdown renderer (marked + supportHtml) treats <details>…</details>
+    // as an HTML block and does NOT parse markdown inside it, so we render the body as HTML.
     const body = exp.concepts
-      .map(c => `**${c.name}** — ${c.briefExplainer}\n\n_${c.relevance}_`)
-      .join("\n\n");
-    md.appendMarkdown(`\n\n<details><summary>Concepts (${exp.concepts.length})</summary>\n\n${body}\n\n</details>`);
+      .map(c => `<p><b>${escapeHtml(c.name)}</b> — ${escapeHtml(c.briefExplainer)}<br><i>${escapeHtml(c.relevance)}</i></p>`)
+      .join("");
+    md.appendMarkdown(`\n\n<details><summary>Concepts (${exp.concepts.length})</summary>${body}</details>`);
   }
 
   return md;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function errorMessage(err: unknown): string {
