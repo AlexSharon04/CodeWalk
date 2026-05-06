@@ -66,6 +66,25 @@ export function activate(context: vscode.ExtensionContext): void {
     prefetchQueue?.dispose();
     segmentStoreSub?.dispose();
 
+    // Build the prefetch queue unconditionally — adjacent prefetch on click is now
+    // the default. The opt-in `prefetchOnSegmentation` setting decides whether the
+    // queue is also fed from segmentation events.
+    prefetchQueue = new PrefetchQueue({
+      explanationStore,
+      agentDeps: {
+        adapter,
+        promptsDir: context.asAbsolutePath("prompts"),
+        structuredOutputMode: resolved.structuredOutputMode,
+      },
+      preset: resolved.backend,
+      promptVersion: EXPLANATION_PROMPT_VERSION,
+      logger,
+    });
+
+    const prefetchNeighborsOnClick = vscode.workspace
+      .getConfiguration("codewalk.explanation")
+      .get<boolean>("prefetchNeighborsOnClick", true);
+
     // Build the comment controller.
     commentController = new CodeWalkCommentController(
       store,
@@ -77,25 +96,16 @@ export function activate(context: vscode.ExtensionContext): void {
         promptVersion: EXPLANATION_PROMPT_VERSION,
         logger,
         structuredOutputMode: resolved.structuredOutputMode,
+        prefetchQueue,
+        prefetchNeighborsOnClick,
       },
     );
 
-    // Conditionally wire the prefetch queue.
-    const prefetchEnabled = vscode.workspace
+    // Opt-in: also prefetch every non-trivial block at segmentation time.
+    const prefetchOnSegmentation = vscode.workspace
       .getConfiguration("codewalk.explanation")
       .get<boolean>("prefetchOnSegmentation", false);
-    if (prefetchEnabled) {
-      prefetchQueue = new PrefetchQueue({
-        explanationStore,
-        agentDeps: {
-          adapter,
-          promptsDir: context.asAbsolutePath("prompts"),
-          structuredOutputMode: resolved.structuredOutputMode,
-        },
-        preset: resolved.backend,
-        promptVersion: EXPLANATION_PROMPT_VERSION,
-        logger,
-      });
+    if (prefetchOnSegmentation) {
       segmentStoreSub = store.onDidChange((uri) => {
         const segs = store.get(uri);
         if (segs) prefetchQueue?.enqueueAll(uri, segs);
@@ -113,6 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
       || e.affectsConfiguration("codewalk.model")
       || e.affectsConfiguration("codewalk.baseUrl")
       || e.affectsConfiguration("codewalk.explanation.prefetchOnSegmentation")
+      || e.affectsConfiguration("codewalk.explanation.prefetchNeighborsOnClick")
     ) {
       void rebuildWiring();
     }

@@ -19,9 +19,18 @@ interface Job {
   uri: vscode.Uri;
 }
 
+interface ThrottleState {
+  lastFiredMs: number;
+  pending: Set<string>;
+  timer?: NodeJS.Timeout;
+}
+
+const THROTTLE_WINDOW_MS = 200;
+
 export class PrefetchQueue implements vscode.Disposable {
   private readonly concurrency: number;
   private readonly perUriTokens = new Map<string, vscode.CancellationTokenSource>();
+  private readonly throttleState = new Map<string, ThrottleState>();
   private disabled = false;
   private drainPromise: Promise<void> = Promise.resolve();
 
@@ -50,12 +59,65 @@ export class PrefetchQueue implements vscode.Disposable {
     this.drainPromise = this.drainPromise.then(() => this.runBatch(jobs, source.token));
   }
 
+  /**
+   * Prefetch the segments directly above and below `anchorId`.
+   * Calls within THROTTLE_WINDOW_MS for the same URI merge into a single batch
+   * so rapid block-stepping (Alt+↑/↓) doesn't spawn five cancelled batches.
+   */
+  enqueueNeighbors(uri: vscode.Uri, anchorId: string, segments: readonly Segment[]): void {
+    if (this.disabled) return;
+    const idx = segments.findIndex(s => s.id === anchorId);
+    if (idx < 0) return;
+    const targets: Segment[] = [];
+    if (idx > 0) targets.push(segments[idx - 1]!);
+    if (idx < segments.length - 1) targets.push(segments[idx + 1]!);
+    if (targets.length === 0) return;
+
+    const key = uri.toString();
+    const state = this.throttleState.get(key) ?? { lastFiredMs: 0, pending: new Set<string>() };
+    for (const t of targets) state.pending.add(t.id);
+    this.throttleState.set(key, state);
+
+    const now = Date.now();
+    if (now - state.lastFiredMs < THROTTLE_WINDOW_MS) {
+      // Inside throttle window — defer the flush so additional calls can merge.
+      if (!state.timer) {
+        const remaining = THROTTLE_WINDOW_MS - (now - state.lastFiredMs);
+        state.timer = setTimeout(() => this.flushNeighbors(uri, segments), remaining);
+      }
+      return;
+    }
+
+    // Outside window — fire immediately.
+    this.flushNeighbors(uri, segments);
+  }
+
+  private flushNeighbors(uri: vscode.Uri, segments: readonly Segment[]): void {
+    const key = uri.toString();
+    const state = this.throttleState.get(key);
+    if (!state) return;
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = undefined;
+    }
+    const pendingIds = state.pending;
+    state.pending = new Set<string>();
+    state.lastFiredMs = Date.now();
+    if (pendingIds.size === 0) return;
+    const segs = segments.filter(s => pendingIds.has(s.id));
+    if (segs.length > 0) this.enqueueAll(uri, segs);
+  }
+
   cancelAll(): void {
     for (const src of this.perUriTokens.values()) {
       src.cancel();
       src.dispose();
     }
     this.perUriTokens.clear();
+    for (const state of this.throttleState.values()) {
+      if (state.timer) clearTimeout(state.timer);
+    }
+    this.throttleState.clear();
   }
 
   /** Test hook — resolves when the latest enqueued batch has fully settled. */

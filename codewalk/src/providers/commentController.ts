@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { SegmentStore } from "../engine/segmentStore";
 import type { ExplanationStore } from "../engine/explanationStore";
+import type { PrefetchQueue } from "../engine/prefetchQueue";
 import type { Explanation, Segment } from "../types";
 import type { ExplanationDeps } from "../engine/explanationAgent";
 import { explain } from "../engine/explanationAgent";
@@ -21,6 +22,8 @@ export interface CommentControllerDeps {
   readonly promptVersion: string;
   readonly logger?: (msg: string) => void;
   readonly structuredOutputMode?: ExplanationDeps["structuredOutputMode"];
+  readonly prefetchQueue?: PrefetchQueue;
+  readonly prefetchNeighborsOnClick?: boolean;
 }
 
 class CodeWalkComment implements vscode.Comment {
@@ -142,6 +145,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
     const cached = this.expStore.get(segmentId, this.deps.preset, this.deps.promptVersion);
     if (cached && cached.renderState === "done") {
       thread.comments = [new CodeWalkComment(renderExplanation(cached))];
+      this.maybePrefetchNeighbors(uri, segmentId);
       return;
     }
     if (cached && cached.renderState === "streaming") {
@@ -149,6 +153,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
       // the user sees "Gathering details…" until the producer flips renderState to done.
       thread.comments = [new CodeWalkComment(renderExplanation(cached))];
       this.startLoader();
+      this.maybePrefetchNeighbors(uri, segmentId);
       return;
     }
 
@@ -163,6 +168,9 @@ export class CodeWalkCommentController implements vscode.Disposable {
     });
 
     const token = this.openTokenSource.token;
+    // Fire neighbor prefetch in parallel with the click's own fetch so that pressing
+    // Alt+↓ next finds the neighbor warm.
+    this.maybePrefetchNeighbors(uri, segmentId);
     try {
       const final = await explain(segment, fileContext, {
         adapter: this.deps.adapter,
@@ -234,6 +242,14 @@ export class CodeWalkCommentController implements vscode.Disposable {
       if (segs.some(s => s.id === segmentId)) return uri;
     }
     return undefined;
+  }
+
+  private maybePrefetchNeighbors(uri: vscode.Uri, anchorId: string): void {
+    if (!this.deps.prefetchQueue) return;
+    if (this.deps.prefetchNeighborsOnClick === false) return;
+    const segs = this.segStore.get(uri);
+    if (!segs) return;
+    this.deps.prefetchQueue.enqueueNeighbors(uri, anchorId, segs);
   }
 
   dispose(): void {

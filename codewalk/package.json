@@ -48,6 +48,11 @@
           "default": false,
           "description": "If enabled, explanations for every segment are fetched in the background immediately after segmentation, so later CodeLens clicks are instant. Costs extra LLM calls for blocks you may never open."
         },
+        "codewalk.explanation.prefetchNeighborsOnClick": {
+          "type": "boolean",
+          "default": true,
+          "description": "When you open a block's explanation, prefetch the segments directly above and below it so neighbor clicks (and Alt+↑/↓ navigation) feel instant. Falls back to on-demand fetching if disabled."
+        },
         "codewalk.explanation.streamIdleTimeoutMs": {
           "type": "number",
           "default": 60000,

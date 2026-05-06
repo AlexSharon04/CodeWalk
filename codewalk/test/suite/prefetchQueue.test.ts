@@ -110,6 +110,89 @@ suite("PrefetchQueue", () => {
     store.dispose();
   });
 
+  test("enqueueNeighbors enqueues the segments directly above and below the anchor", async () => {
+    const store = new ExplanationStore(ctx());
+    const calledFor: string[] = [];
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("only stream path used"); },
+      async *completeStream() { yield VALID; },
+    };
+    const q = new PrefetchQueue({
+      explanationStore: store,
+      agentDeps: { adapter, promptsDir: PROMPTS_DIR },
+      preset: "groq",
+      promptVersion: "v1",
+    });
+    // Stub explain by tracking which segments hit the store via streaming placeholder.
+    // (the queue writes a streaming placeholder before each fetch; we observe through
+    // the store's onDidChange.)
+    store.onDidChange((id) => calledFor.push(id));
+    const segs = [seg("s1", 1), seg("s2", 10), seg("s3", 20), seg("s4", 30), seg("s5", 40)];
+    q.enqueueNeighbors(vscode.Uri.file("/tmp/a.ts"), "s3", segs);
+    // Wait past the 200ms throttle window so the deferred flush dispatches.
+    await new Promise(r => setTimeout(r, 250));
+    await q.drain();
+    // Both s2 and s4 should have been enqueued (streaming placeholder set then explanation stored).
+    assert.ok(calledFor.includes("s2"), `expected s2 in calledFor, got ${calledFor.join(",")}`);
+    assert.ok(calledFor.includes("s4"));
+    assert.ok(!calledFor.includes("s1"));
+    assert.ok(!calledFor.includes("s5"));
+    q.dispose();
+    store.dispose();
+  });
+
+  test("enqueueNeighbors at file boundary enqueues only the available neighbor", async () => {
+    const store = new ExplanationStore(ctx());
+    const calledFor: string[] = [];
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("only stream path used"); },
+      async *completeStream() { yield VALID; },
+    };
+    const q = new PrefetchQueue({
+      explanationStore: store,
+      agentDeps: { adapter, promptsDir: PROMPTS_DIR },
+      preset: "groq",
+      promptVersion: "v1",
+    });
+    store.onDidChange((id) => calledFor.push(id));
+    const segs = [seg("first", 1), seg("second", 10), seg("third", 20)];
+    q.enqueueNeighbors(vscode.Uri.file("/tmp/a.ts"), "first", segs);
+    await new Promise(r => setTimeout(r, 250));
+    await q.drain();
+    assert.ok(calledFor.includes("second"));
+    assert.ok(!calledFor.includes("third"));
+    q.dispose();
+    store.dispose();
+  });
+
+  test("rapid enqueueNeighbors calls within throttle window merge into a single batch", async () => {
+    const store = new ExplanationStore(ctx());
+    let adapterCalls = 0;
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("only stream path used"); },
+      async *completeStream() { adapterCalls++; yield VALID; },
+    };
+    const q = new PrefetchQueue({
+      explanationStore: store,
+      agentDeps: { adapter, promptsDir: PROMPTS_DIR },
+      preset: "groq",
+      promptVersion: "v1",
+    });
+    const uri = vscode.Uri.file("/tmp/a.ts");
+    const segs = [seg("a", 1), seg("b", 10), seg("c", 20), seg("d", 30), seg("e", 40)];
+    // Fire three calls in rapid succession (well under 200ms apart).
+    q.enqueueNeighbors(uri, "b", segs);  // pending: a, c
+    q.enqueueNeighbors(uri, "c", segs);  // pending: a, c, b, d  (deduped)
+    q.enqueueNeighbors(uri, "d", segs);  // pending: a, b, c, d, e (deduped)
+    await new Promise(r => setTimeout(r, 350));
+    await q.drain();
+    // The merged batch hits all five neighbors at most, and dedup means one call per unique id.
+    assert.ok(adapterCalls >= 4 && adapterCalls <= 5,
+      `expected 4-5 unique fetches after merge, got ${adapterCalls}`);
+    q.dispose();
+    store.dispose();
+  });
+
   test("disables itself for the session on AuthError; subsequent enqueueAll is a no-op", async () => {
     const store = new ExplanationStore(ctx());
     let calls = 0;
