@@ -1,0 +1,13 @@
+session start, examine state of repo and see what is left to impliment. i think a line by line semantic output instead could be cool but ive forgotten some of the direction and need a design breifing before any new implinetation
+
+---
+
+analysing is aniated yay!! also the concepts is still not showing up, however i do think that it is outputting too much informaiton, i think we can restructure the paragraph outputter. instead of already having the trivial blocks loaded, and additional information gathered on the more complicated blocks that take longer to run, i think we need to get rid of pre filling the trivial blocks, just block labeling at the start at codewalk start. then after, when the user clicks on a block, it prefetches the adjacent blocks (dirently above or below) it. combined with feature 3 with the up and down movement, i think this could make it more functional. so in summary
+
+1. remove prefilling trival blocks, codewalk start only creates codeblocks and basic one liner
+2. the codeblock paragraph has to be shorter and well designed. think like max 5 sentences or a bulleted list or something. has to be informative etc but quick to produce.
+3. redisign or view the prefetching logic to work as described, then think about phase 3 features to ship in here as well
+
+---
+
+ahh let me answer questions sorry
