@@ -1,0 +1,13 @@
+looking good keep chugging
+
+---
+
+where am i supposed to be seeing the status bar
+
+---
+
+status bar was not enabled. how alt switching working. but notice that alt s doesnt really do anything since only 1 file can be open in codewalk at once
+
+---
+
+i love the checkec versus unchecked part in walkthrough files. i am still having trouble getting the queue up in the first place. so far my workflow is open a file, run the start codewalk command, it scans the file, then i review the file, then open another file manually, run the start codewalk command, it scans the file......is this the functuonal loop we have in place so far. cause if so, then alt s will always be done on the last file 1/1, 2/2 3/3, etc. because im manually switching an running start codewalk on them. what if there was a similar checkbox thing in walkthroguh files, but for initiating a start codewalk, with a quick selector for all files. then the user can select which files they want to send to the llm for creating codewalks, and then they can start reviewing. obviously, somehow when a user wants to review a codeblock or create the line by line, that operation gets started immediatly. only when the user is looking at the code is the llm generating the codeblocks in the background
