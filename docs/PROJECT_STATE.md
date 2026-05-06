@@ -1,21 +1,26 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-04-20
-**Current phase:** Phase 2 — Level 1 Explanations — **schema migration complete, Phase 2 ready for demo**
-**Current step:** Phase 2b schema migration (Tasks 1-18) complete. Explanation type migrated from v1 (summary + pointsToConsider) to v2 (kind + purpose + flow + uses + produces + watch + concepts). All 113 tests passing. Kind classification implemented: trivial (no LLM call) vs logic/io (full schema). Ready for demo delivery.
+**Last updated:** 2026-05-06
+**Current phase:** Phase 2c — single-narrative v3 schema + adjacent prefetch — **code complete, Phase 3 nav next**
+**Current branch:** `phase2c-narrative-and-nav`
+**Current step:** Phase 2c steps 1-6 of 12 complete (schema migration + adjacent prefetch). Steps 7-12 (Phase 3 full nav) pending user verification of the v3 prose output and adjacent-prefetch behavior in the Extension Development Host before proceeding.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
-- [x] Phase 2 — Level 1 Explanations — **code complete 2026-04-20; manual checklist pending**
-- [ ] Phase 3 — Navigation & File Queue
+- [x] Phase 2 — Level 1 Explanations — **code complete 2026-04-20; superseded by Phase 2b**
+- [x] Phase 2b — Adaptive kind-aware schema (kind + purpose + flow + uses + produces + watch + concepts) — **code complete 2026-04-20; superseded by Phase 2c**
+- [~] Phase 2c — Single-narrative v3 schema + adjacent prefetch — **schema + prefetch code complete 2026-05-06; Phase 3 nav slice (steps 7-12) pending**
+- [ ] Phase 3 — Navigation & File Queue (folded into Phase 2c slice)
 - [ ] Phase 4 — Level 2 & Polish
 
 ## Active artifacts
 - Phase 1 spec: `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md` *(approved 2026-04-17)*
 - Phase 1 plan: `docs/superpowers/plans/2026-04-17-codewalk-phase1-core-loop.md` *(17 tasks, all complete)*
-- **Phase 2 spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md` *(approved 2026-04-20; plan + implementation complete)***
+- Phase 2 spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md` *(approved 2026-04-20; plan + implementation complete)*
 - Phase 2 plan: `docs/superpowers/plans/2026-04-20-codewalk-phase2-explanations.md` *(14 tasks, all complete)*
-- Post-MVP vision: `docs/POST_MVP_VISION.md` *(Phase 5 — Cross-file Intelligence — parked until Phase 4 ships)*
+- Phase 2b spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2b-adaptive-explanation.md` *(approved 2026-04-20; superseded by Phase 2c)*
+- **Phase 2c plan: `docs/superpowers/plans/2026-05-06-codewalk-phase2c-narrative-and-nav.md` *(approved 2026-05-06; steps 1-6 of 12 complete on `phase2c-narrative-and-nav` branch)***
+- Post-MVP vision: `docs/POST_MVP_VISION.md` *(Phase 5 — Cross-file Intelligence — parked until Phase 4 ships; **Phase 5 `uses`-text-to-link seam was dropped with v3 single-narrative — see Phase 2c plan §Risks**)*
 - ADRs: `docs/ARCHITECTURE_DECISIONS.md` *(ADR-001, ADR-002, ADR-003, ADR-004, ADR-005 accepted)*
 - README with user testing instructions: `codewalk/README.md`
 
@@ -190,4 +195,25 @@ These pieces are already in place and Phase 2 can build on them without refactor
 - [ ] If any log line starts with `[explanation] WARN trivial-kind returned populated arrays`, it means the model mis-tagged a rich block as trivial and the normalizer cleaned it up — acceptable.
 
 ## What's next
-Phase 2 fixes, preparing for phase 3.
+
+Phase 2c steps 7-12 (Phase 3 nav slice). User-action gate: verify v3 prose output and adjacent-prefetch behavior in Extension Development Host first.
+
+### Phase 2c — verification before continuing
+
+Steps 1-6 are committed on `phase2c-narrative-and-nav`:
+1. ✅ Step 1-4 (commit `d8c739f`): v3 schema migration (single-narrative `summary` field; drops `kind`/`purpose`/`flow`/`uses`/`produces`/`watch`/`concepts` and the trivial pre-population eager write).
+2. ✅ Step 5-6 (commit `7a451b4`): `PrefetchQueue.enqueueNeighbors` with 200 ms throttle + `prefetchNeighborsOnClick` setting wired into the click path.
+
+### Manual verification checklist (run before steps 7-12)
+
+1. F5 in `codewalk/` to launch Extension Development Host. Open `codewalk/test/fixtures/sample.ts`.
+2. Run **Start CodeWalk**. Block labels appear; **no Output channel `[explanation]` lines should fire at this stage** (trivial pre-population is gone).
+3. Click any non-trivial CodeLens. Loader animates. Within ~3 s the panel should show a single italic 3–5 sentence prose paragraph — no `Flow` / `Uses` / `Produces` / `Watch` headers, no Concepts dropdown.
+4. Click a trivial block (top-of-file imports). Panel opens instantly with the segmenter's one-liner. No spinner, no LLM call (cache miss path triggers click-time `synthesizeTrivial`, no network).
+5. Click block 5. Output channel should log `[prefetch]` activity for blocks 4 and 6 within ~200 ms.
+6. Click block 4 immediately after — panel should open instantly (prefetched).
+7. Run **CodeWalk: Reset Explanation Cache**. Re-click — should re-stream.
+8. Reload window with v2 entries in `globalState`. On activation, Output channel should log eviction count > 0; subsequent clicks re-stream against v3 schema.
+9. Verify on both Anthropic and Groq presets per ADR-003 dogfood warning.
+
+Steps 7-12 (Phase 3 nav: WalkSession service, Alt+↓/↑/S keybindings, status bar, sidebar TreeView, multi-file queue, docs) start once the above checklist is green.
