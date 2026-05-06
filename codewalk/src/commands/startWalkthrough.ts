@@ -1,22 +1,10 @@
 import * as vscode from "vscode";
 import { readUserConfig } from "../utils/config";
 import { resolveBackend } from "../llm/presets";
-import { OpenAICompatibleAdapter } from "../llm/openAiCompatibleAdapter";
 import { isOllamaReachable } from "../llm/ollamaDetection";
-import { FileTooLargeError, segment } from "../engine/segmenter";
 import type { SegmentStore } from "../engine/segmentStore";
-import {
-  AuthError,
-  CancelledError,
-  MalformedResponseError,
-  NetworkError,
-  RateLimitError,
-} from "../llm/adapter";
-import {
-  SegmentTooLargeError,
-  ExplanationStreamError,
-} from "../engine/explanationAgent";
 import { runFirstRunWizard } from "./firstRunWizard";
+import { segmentFileForWalk } from "./segmentFile";
 import type { WalkSession } from "../services/walkSession";
 
 export function registerStartWalkthrough(
@@ -37,6 +25,9 @@ export function registerStartWalkthrough(
       return;
     }
 
+    // Resolve backend / fire wizard if needed. segmentFileForWalk also resolves
+    // backend, but it doesn't run the wizard — Start CodeWalk is the wizard's
+    // entry point, so we handle it here.
     const userConfig = await readUserConfig(context);
     let resolved;
     try {
@@ -46,7 +37,6 @@ export function registerStartWalkthrough(
       return;
     }
 
-    let finalResolved = resolved;
     const ollamaNotReady =
       resolved.backend === "ollama-local" && !(await isOllamaReachable(resolved.baseUrl));
     const cloudKeyMissing =
@@ -54,54 +44,23 @@ export function registerStartWalkthrough(
 
     if (ollamaNotReady || cloudKeyMissing) {
       const wizardResult = await runFirstRunWizard(context);
-      if (!wizardResult) return; // user cancelled the wizard
-      finalResolved = wizardResult;
+      if (!wizardResult) return;
       if (
-        finalResolved.backend === "ollama-local" &&
-        !(await isOllamaReachable(finalResolved.baseUrl))
+        wizardResult.backend === "ollama-local" &&
+        !(await isOllamaReachable(wizardResult.baseUrl))
       ) {
         vscode.window.showErrorMessage(
-          `CodeWalk can't reach Ollama at ${finalResolved.baseUrl}. Start Ollama and try again.`,
+          `CodeWalk can't reach Ollama at ${wizardResult.baseUrl}. Start Ollama and try again.`,
         );
         return;
       }
     }
 
-    store.clear(document.uri);
-
-    const adapter = new OpenAICompatibleAdapter({
-      baseUrl: finalResolved.baseUrl,
-      apiKey: finalResolved.apiKey,
-      model: finalResolved.model,
-      structuredOutputMode: finalResolved.structuredOutputMode,
-    });
-
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: "CodeWalk: Analyzing…",
-        cancellable: true,
-      },
-      async (_progress, token) => {
-        try {
-          const promptsDir = context.asAbsolutePath("prompts");
-          const segments = await segment(document, {
-            adapter,
-            promptsDir,
-            logger: (msg) => output.appendLine(msg),
-            token,
-          });
-          store.set(document.uri, segments);
-          output.appendLine(`[success] ${segments.length} segments for ${document.fileName}`);
-          // Seed the walk session with this file. Sidebar (Phase 3 step 10) can extend
-          // the queue; for now, single-file walkthroughs preserve Phase 1/2 demo flow.
-          walkSession?.addFile(document.uri);
-          walkSession?.start();
-        } catch (e) {
-          handleError(e, output);
-        }
-      },
-    );
+    const result = await segmentFileForWalk(context, store, output, document.uri);
+    if (result.ok) {
+      walkSession?.addFile(document.uri);
+      walkSession?.start();
+    }
   });
 }
 
@@ -113,57 +72,4 @@ function showSettingsError(message: string): void {
         vscode.commands.executeCommand("workbench.action.openSettings", "codewalk");
       }
     });
-}
-
-function handleError(e: unknown, output: vscode.OutputChannel): void {
-  if (e instanceof CancelledError) {
-    output.appendLine("[cancelled] user cancelled CodeWalk analysis");
-    return;
-  }
-  if (e instanceof SegmentTooLargeError) {
-    output.appendLine(
-      `[SegmentTooLargeError] segmentId=${e.segmentId} lines=${e.lineCount}/${e.maxLines}`,
-    );
-    vscode.window.showWarningMessage(
-      `CodeWalk skipped a block that's too large to explain (${e.lineCount} / ${e.maxLines} lines).`,
-    );
-    return;
-  }
-  if (e instanceof ExplanationStreamError) {
-    output.appendLine(
-      `[ExplanationStreamError] cause=${e.cause} message=${e.message}`,
-    );
-    vscode.window.showErrorMessage(
-      "CodeWalk couldn't finish the explanation — the connection dropped. Try again.",
-    );
-    return;
-  }
-  if (e instanceof NetworkError) {
-    output.appendLine(`[NetworkError] ${e.message}`);
-    vscode.window.showErrorMessage(
-      "CodeWalk couldn't reach the LLM. Check your connection and backend URL.",
-    );
-  } else if (e instanceof AuthError) {
-    output.appendLine(`[AuthError] ${e.message}`);
-    showSettingsError("CodeWalk's API key was rejected. Open settings to update it.");
-  } else if (e instanceof RateLimitError) {
-    output.appendLine(`[RateLimitError] ${e.message}${e.retryAfter ? ` retry-after: ${e.retryAfter}s` : ""}`);
-    vscode.window.showErrorMessage("CodeWalk hit a rate limit. Try again in a moment.");
-  } else if (e instanceof MalformedResponseError) {
-    output.appendLine(`[MalformedResponseError] ${e.message}\nRaw: ${e.rawResponse ?? "<none>"}`);
-    showSettingsError(
-      "CodeWalk couldn't parse the model's response. Try a more capable model in settings.",
-    );
-  } else if (e instanceof FileTooLargeError) {
-    output.appendLine(`[FileTooLargeError] ${e.message}`);
-    vscode.window.showWarningMessage(
-      `CodeWalk can't analyze files over ${e.maxLines} lines yet. This file has ${e.lineCount}.`,
-    );
-  } else {
-    const err = e as Error;
-    output.appendLine(`[Unhandled] ${err.stack ?? err.message ?? String(e)}`);
-    vscode.window.showErrorMessage(
-      "CodeWalk encountered an unexpected error. See the Output panel.",
-    );
-  }
 }

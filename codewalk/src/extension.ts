@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   const startCommand = registerStartWalkthrough(context, store, output, walkSession);
-  const navCommands = registerBlockNavCommands(walkSession, store);
+  const navCommands = registerBlockNavCommands(context, walkSession, store, output);
 
   // Logger for modules that need structured output.
   const logger = (msg: string) => output.appendLine(msg);
