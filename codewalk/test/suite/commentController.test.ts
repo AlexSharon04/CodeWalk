@@ -22,13 +22,7 @@ function fakeSegment(id: string, startLine: number): Segment {
 function fakeExplanation(segId: string, state: Explanation["renderState"] = "done"): Explanation {
   return {
     segmentId: segId,
-    kind: "logic",
-    purpose: "This is a 20+char valid summary that explains what the block does.",
-    flow: [],
-    uses: ["Assumes input is valid JSON."],
-    produces: [],
-    watch: [],
-    concepts: [],
+    summary: "This is a 40+char valid summary that explains what the block does and why.",
     renderState: state,
   };
 }
@@ -165,7 +159,7 @@ suite("CodeWalkCommentController", () => {
     const before = controller.currentThreadBody();
     // Update with a richer streaming entry.
     const updated = fakeExplanation("seg-1", "streaming");
-    updated.purpose = "Now with more characters streamed in for this block.";
+    updated.summary = "Now with more characters streamed in for this block.";
     expStore.set("seg-1", "groq", "v1", updated);
     // Loader ticks at 250ms; the snap-on-partial path in onExplanationChanged should update
     // within one microtask, but wait up to 1s to avoid CI flakes.

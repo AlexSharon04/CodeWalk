@@ -7,13 +7,7 @@ import type { Explanation } from "../../src/types";
 function fakeExplanation(overrides: Partial<Explanation> = {}): Explanation {
   return {
     segmentId: "seg-abc",
-    kind: "logic",
-    purpose: "A 20+char valid summary that explains what the block does in detail.",
-    flow: [],
-    uses: [],
-    produces: [],
-    watch: [],
-    concepts: [],
+    summary: "A 40+char valid summary that explains what the block does and why.",
     renderState: "done",
     ...overrides,
   };
@@ -87,7 +81,7 @@ suite("ExplanationStore", () => {
   test("set does not persist renderState: 'streaming' entries", async () => {
     const memento = new FakeMemento();
     const store = new ExplanationStore(fakeContext(memento));
-    store.set("seg-abc", "groq", "v1", fakeExplanation({ renderState: "streaming", purpose: "" }));
+    store.set("seg-abc", "groq", "v1", fakeExplanation({ renderState: "streaming", summary: "" }));
     await new Promise(r => setImmediate(r));
     assert.strictEqual(memento.updateCount, 0);
     // But the in-memory map still holds the entry.

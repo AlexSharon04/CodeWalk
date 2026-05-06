@@ -10,22 +10,8 @@ export interface Segment {
   difficulty: Difficulty;
 }
 
-export interface Concept {
-  name: string;
-  briefExplainer: string;
-  relevance: string;
-}
-
-export type ExplanationKind = "trivial" | "logic" | "io";
-
 export interface Explanation {
   segmentId: string;
-  kind: ExplanationKind;
-  purpose: string;
-  flow: string[];
-  uses: string[];
-  produces: string[];
-  watch: string[];
-  concepts: Concept[];
+  summary: string;
   renderState: "streaming" | "done" | "error";
 }

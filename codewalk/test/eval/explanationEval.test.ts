@@ -14,11 +14,10 @@ interface Fixture {
   segment: Segment;
   fileContext: string;
   expect: {
-    expectedKind?: "trivial" | "logic" | "io";
-    mustMention: string[];
-    mustNotMention?: string[];
-    minPurposeLength?: number;
-    expectedConceptsIncluding?: string[];
+    mustMention: string[];                  // case-insensitive substrings that must appear in summary
+    mustNotMention?: string[];              // case-insensitive — soft warning
+    minSummaryLength?: number;              // soft warning
+    maxSummaryLength?: number;              // soft warning
   };
 }
 
@@ -41,11 +40,10 @@ const FIXTURES: Fixture[] = [
     },
     fileContext: "// (elided — eval uses block-only context for determinism)",
     expect: {
-      expectedKind: "io",
-      mustMention: ["verif", "HS256"],       // purpose, flow, uses, produces, or watch must mention verify/verification and HS256
+      mustMention: ["verif", "HS256"],
       mustNotMention: ["TODO", "FIXME", "I think"],
-      minPurposeLength: 80,
-      expectedConceptsIncluding: ["JWT"],
+      minSummaryLength: 80,
+      maxSummaryLength: 700,
     },
   },
 ];
@@ -69,7 +67,6 @@ suite("explanation eval", () => {
 
   for (const fx of FIXTURES) {
     test(fx.name, async () => {
-      // Use the configured backend; pull apiKey from SecretStorage via environment variable.
       const preset = (process.env.CODEWALK_EVAL_PRESET ?? "groq") as keyof typeof PRESETS;
       const presetCfg = PRESETS[preset];
       assert.ok(presetCfg, `unknown preset ${preset}`);
@@ -85,30 +82,19 @@ suite("explanation eval", () => {
         structuredOutputMode: presetCfg.structuredOutputMode,
       });
 
-      const allText =
-        exp.purpose
-        + " " + exp.flow.join(" ")
-        + " " + exp.uses.join(" ")
-        + " " + exp.produces.join(" ")
-        + " " + exp.watch.join(" ");
+      const mustMentionHits = matchesAny(exp.summary, fx.expect.mustMention);
+      const mustNotMentionHits = matchesAny(exp.summary, fx.expect.mustNotMention ?? []);
+      const minOk = (fx.expect.minSummaryLength ?? 0) <= exp.summary.length;
+      const maxOk = (fx.expect.maxSummaryLength ?? Infinity) >= exp.summary.length;
 
-      const mustMentionHits = matchesAny(allText, fx.expect.mustMention);
-      const mustNotMentionHits = matchesAny(allText, fx.expect.mustNotMention ?? []);
-      const conceptHits = fx.expect.expectedConceptsIncluding
-        ? matchesAny(exp.concepts.map(c => c.name).join(" "), fx.expect.expectedConceptsIncluding)
-        : [];
-      const lenOk = (fx.expect.minPurposeLength ?? 0) <= exp.purpose.length;
-
-      console.log(`[eval] ${fx.name} purpose=${exp.purpose.length}ch mustMention=${JSON.stringify(mustMentionHits)}/${JSON.stringify(fx.expect.mustMention)} ${mustMentionHits.length === fx.expect.mustMention.length ? "PASS" : "FAIL"}`);
-      console.log(`       flow=${exp.flow.length} uses=${exp.uses.length} produces=${exp.produces.length} watch=${exp.watch.length} concepts=${exp.concepts.length}`);
-      if (fx.expect.expectedKind && exp.kind !== fx.expect.expectedKind) {
-        console.warn(`       WARN expected kind=${fx.expect.expectedKind}, got ${exp.kind}`);
-      }
-      if (!lenOk) console.warn(`       WARN purpose below minPurposeLength ${fx.expect.minPurposeLength}`);
+      console.log(
+        `[eval] ${fx.name} summaryChars=${exp.summary.length} `
+        + `mustMention=${JSON.stringify(mustMentionHits)}/${JSON.stringify(fx.expect.mustMention)} `
+        + `${mustMentionHits.length === fx.expect.mustMention.length ? "PASS" : "FAIL"}`,
+      );
+      if (!minOk) console.warn(`       WARN summary below minSummaryLength ${fx.expect.minSummaryLength}`);
+      if (!maxOk) console.warn(`       WARN summary above maxSummaryLength ${fx.expect.maxSummaryLength}`);
       if (mustNotMentionHits.length) console.warn(`       WARN mustNotMention hits: ${mustNotMentionHits.join(", ")}`);
-      if (fx.expect.expectedConceptsIncluding && conceptHits.length !== fx.expect.expectedConceptsIncluding.length) {
-        console.warn(`       WARN concepts missing: ${fx.expect.expectedConceptsIncluding.filter(x => !conceptHits.includes(x)).join(", ")}`);
-      }
 
       assert.strictEqual(
         mustMentionHits.length,

@@ -78,13 +78,7 @@ export class PrefetchQueue implements vscode.Disposable {
           // Mark streaming placeholder so concurrent user clicks know an agent is working.
           this.deps.explanationStore.set(job.segment.id, this.deps.preset, this.deps.promptVersion, {
             segmentId: job.segment.id,
-            kind: "logic",
-            purpose: "",
-            flow: [],
-            uses: [],
-            produces: [],
-            watch: [],
-            concepts: [],
+            summary: "",
             renderState: "streaming",
           });
           const exp = await explain(job.segment, "", {

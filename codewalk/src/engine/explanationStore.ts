@@ -13,13 +13,7 @@ function isDoneExplanation(x: unknown): x is Explanation {
   const o = x as Explanation;
   return (
     typeof o.segmentId === "string"
-    && (o.kind === "trivial" || o.kind === "logic" || o.kind === "io")
-    && typeof o.purpose === "string"
-    && Array.isArray(o.flow)
-    && Array.isArray(o.uses)
-    && Array.isArray(o.produces)
-    && Array.isArray(o.watch)
-    && Array.isArray(o.concepts)
+    && typeof o.summary === "string"
     && o.renderState === "done"
   );
 }

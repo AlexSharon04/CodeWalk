@@ -16,7 +16,7 @@ function smallSegment(): Segment {
     oneLiner: "Returns the sum of two numbers.",
     startLine: 1,
     endLine: 3,
-    difficulty: "trivial",
+    difficulty: "standard",
     code: "function sum(a: number, b: number): number {\n  return a + b;\n}",
   };
 }
@@ -27,7 +27,7 @@ suite("explanation live integration", () => {
     return;
   }
 
-  test("explains a trivial block against the configured backend", async () => {
+  test("explains a small block against the configured backend", async () => {
     const preset = (process.env.CODEWALK_EVAL_PRESET ?? "groq") as keyof typeof PRESETS;
     const cfg = PRESETS[preset];
     assert.ok(cfg, `unknown preset ${preset}`);
@@ -42,14 +42,8 @@ suite("explanation live integration", () => {
       promptsDir: PROMPTS_DIR,
       structuredOutputMode: cfg.structuredOutputMode,
     });
-    assert.ok(exp.kind === "trivial" || exp.kind === "logic" || exp.kind === "io",
-      `kind must be one of trivial|logic|io, got ${exp.kind}`);
-    assert.ok(typeof exp.purpose === "string" && exp.purpose.length > 0,
-      "purpose must be a non-empty string");
-    assert.ok(Array.isArray(exp.flow));
-    assert.ok(Array.isArray(exp.uses));
-    assert.ok(Array.isArray(exp.produces));
-    assert.ok(Array.isArray(exp.watch));
-    assert.ok(Array.isArray(exp.concepts));
+    assert.ok(typeof exp.summary === "string" && exp.summary.length >= 40,
+      `summary must be a non-empty string ≥ 40 chars, got ${exp.summary.length}`);
+    assert.strictEqual(exp.renderState, "done");
   });
 });

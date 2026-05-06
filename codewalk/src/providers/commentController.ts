@@ -87,18 +87,18 @@ export class CodeWalkCommentController implements vscode.Disposable {
   private renderLoaderFrame(): void {
     if (!this.openThread || !this.openSegment || this.loaderStartMs === undefined) return;
     const exp = this.expStore.get(this.openSegment.id, this.deps.preset, this.deps.promptVersion);
-    const partialPurpose = exp?.purpose ?? "";
+    const partialSummary = exp?.summary ?? "";
     const elapsedMs = Date.now() - this.loaderStartMs;
     const dotCount = 1 + Math.floor(elapsedMs / 400) % 3;
     const dots = ".".repeat(dotCount);
     const secs = (elapsedMs / 1000).toFixed(1);
     const md = new vscode.MarkdownString("", true);
-    md.supportHtml = true;
+    md.supportHtml = false;
     md.isTrusted = false;
-    if (partialPurpose.length === 0) {
+    if (partialSummary.length === 0) {
       md.appendMarkdown(`_Analyzing${dots} (${secs}s)_`);
     } else {
-      md.appendMarkdown(`**${partialPurpose}**`);
+      md.appendMarkdown(partialSummary);
       md.appendMarkdown(`\n\n---\n\n_Gathering details${dots} (${secs}s)_`);
     }
     this.openThread.comments = [new CodeWalkComment(md)];
@@ -158,13 +158,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
     this.startLoader();
     this.expStore.set(segmentId, this.deps.preset, this.deps.promptVersion, {
       segmentId,
-      kind: "logic",
-      purpose: "",
-      flow: [],
-      uses: [],
-      produces: [],
-      watch: [],
-      concepts: [],
+      summary: "",
       renderState: "streaming",
     });
 
@@ -181,7 +175,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
           if (!current) return;
           this.expStore.set(segmentId, this.deps.preset, this.deps.promptVersion, {
             ...current,
-            purpose: partial.purpose ?? current.purpose,
+            summary: partial.summary ?? current.summary,
             renderState: "streaming",
           });
         },
@@ -251,54 +245,16 @@ export class CodeWalkCommentController implements vscode.Disposable {
 
 function renderExplanation(exp: Explanation): vscode.MarkdownString {
   const md = new vscode.MarkdownString("", true);
-  md.supportHtml = true;
+  md.supportHtml = false;
   md.isTrusted = false;
 
-  // Handle streaming state with no purpose yet
-  if (exp.renderState === "streaming" && !exp.purpose) {
+  if (exp.renderState === "streaming" && !exp.summary) {
     md.appendMarkdown("_Analyzing…_");
     return md;
   }
 
-  // Render purpose (trivial shows italicized, others show bold)
-  if (exp.kind === "trivial") {
-    md.appendMarkdown(`*${exp.purpose}*`);
-  } else {
-    md.appendMarkdown(`**${exp.purpose}**`);
-  }
-
-  if (exp.renderState !== "done") {
-    return md;
-  }
-
-  if (exp.flow.length) {
-    md.appendMarkdown(`\n\n**Flow**\n\n${exp.flow.map(s => `- ${s}`).join("\n")}`);
-  }
-  if (exp.uses.length) {
-    // v2-schema items are descriptive phrases ("symbol — why"). The inline `·` separator
-    // gets lost inside em-dashes, so render as a bullet list for readability.
-    md.appendMarkdown(`\n\n**Uses**\n\n${exp.uses.map(s => `- ${s}`).join("\n")}`);
-  }
-  if (exp.produces.length) {
-    md.appendMarkdown(`\n\n**Produces**\n\n${exp.produces.map(s => `- ${s}`).join("\n")}`);
-  }
-  if (exp.watch.length) {
-    md.appendMarkdown(`\n\n**Watch**\n\n${exp.watch.map(s => `- ${s}`).join("\n")}`);
-  }
-  if (exp.concepts.length) {
-    // VS Code's hover markdown renderer (marked + supportHtml) treats <details>…</details>
-    // as an HTML block and does NOT parse markdown inside it, so we render the body as HTML.
-    const body = exp.concepts
-      .map(c => `<p><b>${escapeHtml(c.name)}</b> — ${escapeHtml(c.briefExplainer)}<br><i>${escapeHtml(c.relevance)}</i></p>`)
-      .join("");
-    md.appendMarkdown(`\n\n<details><summary>Concepts (${exp.concepts.length})</summary>${body}</details>`);
-  }
-
+  md.appendMarkdown(exp.summary);
   return md;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function errorMessage(err: unknown): string {

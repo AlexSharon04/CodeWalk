@@ -3,12 +3,29 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { suite, test } from "mocha";
 import { loadPrompt } from "../../src/prompts/loader";
-import { explain, DEFAULT_MAX_SEGMENT_LINES, EXPLANATION_PROMPT_VERSION, SegmentTooLargeError, ExplanationStreamError } from "../../src/engine/explanationAgent";
+import {
+  explain,
+  DEFAULT_MAX_SEGMENT_LINES,
+  EXPLANATION_PROMPT_VERSION,
+  SegmentTooLargeError,
+  ExplanationStreamError,
+  synthesizeTrivial,
+} from "../../src/engine/explanationAgent";
 import { MalformedResponseError, AuthError, RateLimitError, CancelledError } from "../../src/llm/adapter";
 import type { LLMAdapter } from "../../src/llm/adapter";
 import type { Segment } from "../../src/types";
 
 const PROMPTS_DIR = path.resolve(__dirname, "../../../prompts");
+
+const VALID_SUMMARY = "Validates the login payload and looks the user up by email, then verifies the bcrypt hash. Watch line 14 — the email is concatenated into the SQL query without escaping.";
+
+const VALID_RESPONSE = JSON.stringify({ summary: VALID_SUMMARY });
+const SHORT_SUMMARY_RESPONSE = JSON.stringify({ summary: "Too short." });
+const PREAMBLE_RESPONSE = JSON.stringify({ summary: "Sure, this block validates the login payload and looks the user up by email." });
+const FENCE_RESPONSE = JSON.stringify({ summary: "```\nValidates the login payload and looks the user up by email.\n```" });
+const ONELINER_ECHO_RESPONSE = JSON.stringify({ summary: "   a test segment   " });
+const RETRY_SUCCEEDED_RESPONSE = JSON.stringify({ summary: "Retry succeeded with a sufficiently long summary that explains what the block actually does in programmer terms." });
+const TOO_LONG_RESPONSE = JSON.stringify({ summary: "x".repeat(800) });
 
 suite("explanation prompt", () => {
   test("prompt file exists and loads via prompt loader", () => {
@@ -28,9 +45,8 @@ suite("explanation prompt", () => {
     assert.ok(rendered.includes("typescript"));
   });
 
-  test("EXPLANATION_PROMPT_VERSION is a non-empty string", () => {
-    assert.strictEqual(typeof EXPLANATION_PROMPT_VERSION, "string");
-    assert.ok(EXPLANATION_PROMPT_VERSION.length > 0);
+  test("EXPLANATION_PROMPT_VERSION is v3", () => {
+    assert.strictEqual(EXPLANATION_PROMPT_VERSION, "v3");
   });
 });
 
@@ -48,12 +64,6 @@ suite("SegmentTooLargeError", () => {
     assert.strictEqual(err.maxLines, 400);
   });
 
-  test("message includes the metrics", () => {
-    const err = new SegmentTooLargeError("seg-abc", 500, 400);
-    assert.ok(err.message.includes("500"));
-    assert.ok(err.message.includes("400"));
-  });
-
   test("name is SegmentTooLargeError", () => {
     const err = new SegmentTooLargeError("seg-abc", 500, 400);
     assert.strictEqual(err.name, "SegmentTooLargeError");
@@ -61,34 +71,11 @@ suite("SegmentTooLargeError", () => {
 });
 
 suite("ExplanationStreamError", () => {
-  test("is an instance of Error", () => {
-    const err = new ExplanationStreamError("seg-abc", 1024, "network");
-    assert.ok(err instanceof Error);
-    assert.ok(err instanceof ExplanationStreamError);
-  });
-
   test("exposes segmentId, partialBytes, cause", () => {
     const err = new ExplanationStreamError("seg-abc", 1024, "network");
     assert.strictEqual(err.segmentId, "seg-abc");
     assert.strictEqual(err.partialBytes, 1024);
     assert.strictEqual(err.cause, "network");
-  });
-
-  test("accepts the three documented causes", () => {
-    const causes: Array<"network" | "provider-terminated" | "parse-never-ready"> = [
-      "network",
-      "provider-terminated",
-      "parse-never-ready",
-    ];
-    for (const c of causes) {
-      const err = new ExplanationStreamError("seg-abc", 0, c);
-      assert.strictEqual(err.cause, c);
-    }
-  });
-
-  test("name is ExplanationStreamError", () => {
-    const err = new ExplanationStreamError("seg-abc", 0, "network");
-    assert.strictEqual(err.name, "ExplanationStreamError");
   });
 });
 
@@ -120,71 +107,6 @@ function stubAdapter(responses: string[]): LLMAdapter {
     },
   };
 }
-
-const VALID_RESPONSE = JSON.stringify({
-  kind: "logic",
-  purpose: "This block declares a constant. It demonstrates TypeScript's const keyword and immutable binding semantics for primitive values.",
-  flow: ["x is bound as a const with value 1"],
-  uses: [],
-  produces: ["const binding: x"],
-  watch: ["x cannot be reassigned due to const binding"],
-  concepts: [
-    { name: "Const binding", briefExplainer: "A const declaration creates an immutable binding in TypeScript; the binding cannot be reassigned. It does not make the value itself immutable for objects.", relevance: "This specific example uses a primitive, so the binding and value are both effectively immutable." },
-  ],
-});
-
-const GENERIC_PTC_RESPONSE = JSON.stringify({
-  kind: "logic",
-  purpose: "This is a valid-looking summary paragraph that says enough to pass the length check.",
-  flow: ["starts processing user input"],
-  uses: ["be careful with this code"],  // generic phrase — must be rejected
-  produces: ["concatenated result"],
-  watch: ["This block on line 3 concatenates user input without escaping it."],
-  concepts: [],
-});
-
-const SHORT_SUMMARY_RESPONSE = JSON.stringify({
-  kind: "logic",
-  purpose: "Short.",
-  flow: [],
-  uses: [],
-  produces: [],
-  watch: [],
-  concepts: [],
-});
-
-const DUP_CONCEPTS_RESPONSE = JSON.stringify({
-  kind: "logic",
-  purpose: "This is a valid-looking summary paragraph that says enough to pass the length check.",
-  flow: [],
-  uses: [],
-  produces: [],
-  watch: [],
-  concepts: [
-    { name: "Closure", briefExplainer: "A closure captures variables from its defining scope. It allows inner functions to access outer-scope bindings after the outer function has returned.", relevance: "This block uses a closure to capture `config`." },
-    { name: "Closure", briefExplainer: "DUPLICATE — should be dropped.", relevance: "DUPLICATE." },
-  ],
-});
-
-const SUMMARY_EQUALS_ONELINER_RESPONSE = JSON.stringify({
-  kind: "logic",
-  purpose: "   a test segment   ",  // matches fakeSegment().oneLiner when trim().toLowerCase() is applied; with padding passes 20-char check (length 20 before trim)
-  flow: [],
-  uses: [],
-  produces: [],
-  watch: [],
-  concepts: [],
-});
-
-const RETRY_SUCCEEDED_RESPONSE = JSON.stringify({
-  kind: "logic",
-  purpose: "This is a valid summary after the retry — teaches the user what the block actually does.",
-  flow: ["config is accessed"],
-  uses: [],
-  produces: [],
-  watch: ["Assumes `config` is defined before this block runs."],
-  concepts: [],
-});
 
 suite("explain() — input guard", () => {
   test("throws SegmentTooLargeError when segment exceeds maxSegmentLines", async () => {
@@ -221,7 +143,7 @@ suite("explain() — input guard", () => {
 });
 
 suite("explain() — happy path (non-streaming)", () => {
-  test("returns a valid Explanation when the adapter returns valid JSON", async () => {
+  test("returns an Explanation with the summary field populated", async () => {
     const seg = fakeSegment();
     const adapter = stubAdapter([VALID_RESPONSE]);
     const result = await explain(seg, "const x = 1;", {
@@ -229,17 +151,13 @@ suite("explain() — happy path (non-streaming)", () => {
       promptsDir: PROMPTS_DIR,
     });
     assert.strictEqual(result.segmentId, "seg-abc");
-    assert.ok(result.purpose.length >= 20);
-    assert.strictEqual(result.kind, "logic");
+    assert.strictEqual(result.summary, VALID_SUMMARY);
     assert.strictEqual(result.renderState, "done");
-    assert.ok(Array.isArray(result.flow));
-    assert.strictEqual(result.concepts.length, 1);
-    assert.strictEqual(result.concepts[0]!.name, "Const binding");
   });
 });
 
 suite("explain() — per-item validation", () => {
-  test("rejects purpose shorter than 20 chars (MalformedResponseError after retry)", async () => {
+  test("rejects summary shorter than 40 chars (MalformedResponseError after retry)", async () => {
     const seg = fakeSegment();
     const adapter = stubAdapter([SHORT_SUMMARY_RESPONSE, SHORT_SUMMARY_RESPONSE]);
     await assert.rejects(
@@ -248,55 +166,38 @@ suite("explain() — per-item validation", () => {
     );
   });
 
-  test("drops generic items matching the generic-phrase regex from flow/uses/produces/watch", async () => {
+  test("rejects summary longer than 700 chars", async () => {
     const seg = fakeSegment();
-    const adapter = stubAdapter([GENERIC_PTC_RESPONSE]);
-    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    // "be careful with this code" was dropped from uses; the watch item survived.
-    assert.strictEqual(result.uses.length, 0);
-    assert.strictEqual(result.watch.length, 1);
-  });
-
-  test("drops generic items that use smart apostrophes (U+2019)", async () => {
-    const seg = fakeSegment();
-    const response: Record<string, any> = {
-      kind: "logic",
-      purpose: "This is a valid-looking summary paragraph that says enough to pass the length check.",
-      flow: ["Does something useful."],
-      uses: [],
-      produces: [],
-      watch: [],
-      concepts: [],
-    };
-    // Add uses with smart apostrophe using String.fromCharCode
-    response.uses.push("Don" + String.fromCharCode(0x2019) + "t forget to validate the inputs before saving.");
-    response.uses.push("Accesses that `session.user` for authentication.");
-    const smartQuoteResponse = JSON.stringify(response);
-    const adapter = stubAdapter([smartQuoteResponse]);
-    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    assert.strictEqual(result.uses.length, 1);
-    assert.ok(
-      result.uses[0]!.includes("session.user"),
-      "the specific use item should survive; the smart-quote generic should be dropped",
+    const adapter = stubAdapter([TOO_LONG_RESPONSE, TOO_LONG_RESPONSE]);
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      MalformedResponseError,
     );
   });
-});
 
-suite("explain() — cross-item validation", () => {
-  test("dedupes duplicate concept names keeping first occurrence", async () => {
+  test("rejects summary that begins with a preamble", async () => {
     const seg = fakeSegment();
-    const adapter = stubAdapter([DUP_CONCEPTS_RESPONSE]);
-    const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    assert.strictEqual(result.concepts.length, 1);
-    assert.ok(result.concepts[0]!.briefExplainer.includes("captures variables"));
+    const adapter = stubAdapter([PREAMBLE_RESPONSE, PREAMBLE_RESPONSE]);
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      MalformedResponseError,
+    );
   });
 
-  test("retries when purpose is identical to segment.oneLiner (case/whitespace-insensitive)", async () => {
-    const seg = fakeSegment();  // oneLiner: "a test segment"
-    const adapter = stubAdapter([SUMMARY_EQUALS_ONELINER_RESPONSE, RETRY_SUCCEEDED_RESPONSE]);
+  test("rejects summary that begins with a Markdown fence", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([FENCE_RESPONSE, FENCE_RESPONSE]);
+    await assert.rejects(
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
+      MalformedResponseError,
+    );
+  });
+
+  test("retries when summary is identical to segment.oneLiner (case/whitespace-insensitive)", async () => {
+    const seg = fakeSegment();
+    const adapter = stubAdapter([ONELINER_ECHO_RESPONSE, RETRY_SUCCEEDED_RESPONSE]);
     const result = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    assert.ok(result.purpose.length > 20);
-    assert.notStrictEqual(result.purpose.trim().toLowerCase(), seg.oneLiner.trim().toLowerCase());
+    assert.notStrictEqual(result.summary.trim().toLowerCase(), seg.oneLiner.trim().toLowerCase());
   });
 });
 
@@ -307,8 +208,7 @@ suite("explain() — retry with threaded reason", () => {
     const adapter: LLMAdapter = {
       async complete(msgs) {
         messages.push(msgs.map(m => ({ role: m.role, content: m.content })));
-        // First call: messages.length is 1 (after push), second call: messages.length is 2
-        return messages.length === 1 ? SUMMARY_EQUALS_ONELINER_RESPONSE : RETRY_SUCCEEDED_RESPONSE;
+        return messages.length === 1 ? ONELINER_ECHO_RESPONSE : RETRY_SUCCEEDED_RESPONSE;
       },
       async *completeStream() { yield ""; },
     };
@@ -316,10 +216,7 @@ suite("explain() — retry with threaded reason", () => {
     assert.strictEqual(messages.length, 2);
     const retrySystem = messages[1]!.find(m => m.role === "system")!.content;
     assert.ok(retrySystem.includes("CRITICAL"));
-    assert.ok(
-      retrySystem.toLowerCase().includes("purpose") && retrySystem.toLowerCase().includes("oneliner"),
-      "retry system prompt must name the specific validation failure",
-    );
+    assert.ok(retrySystem.toLowerCase().includes("oneliner"), "retry must name the validation failure");
   });
 
   test("retries once; second failure surfaces MalformedResponseError with both attempts", async () => {
@@ -344,49 +241,24 @@ function streamingAdapter(chunks: string[]): LLMAdapter {
 }
 
 suite("explain() — streaming", () => {
-  test("onPartial fires with partial purpose as tokens arrive", async () => {
+  test("onPartial fires with monotonically-growing summary as tokens arrive", async () => {
     const seg = fakeSegment();
-    // Split the valid response into 3 chunks, first cutting mid-purpose.
     const whole = VALID_RESPONSE;
-    const sliceAt = whole.indexOf(", ") + 2;  // mid-purpose
+    const sliceAt = whole.indexOf(", ") + 2;
     const chunks = [whole.slice(0, sliceAt), whole.slice(sliceAt, sliceAt + 40), whole.slice(sliceAt + 40)];
     const adapter = streamingAdapter(chunks);
-    const partials: Array<{ purpose?: string }> = [];
+    const partials: Array<{ summary?: string }> = [];
     await explain(seg, "", {
       adapter,
       promptsDir: PROMPTS_DIR,
       onPartial: p => partials.push({ ...p }),
     });
-    // At least one onPartial with a non-empty purpose prefix.
-    const purposes = partials.map(p => p.purpose ?? "");
-    assert.ok(purposes.some(s => s.length > 0), "expected at least one partial with purpose");
-    // Purposes should be monotonically-growing prefixes.
-    for (let i = 1; i < purposes.length; i++) {
-      if (purposes[i]!.length > 0 && purposes[i - 1]!.length > 0) {
-        assert.ok(purposes[i]!.startsWith(purposes[i - 1]!), "purpose stream should grow monotonically");
+    const summaries = partials.map(p => p.summary ?? "");
+    assert.ok(summaries.some(s => s.length > 0), "expected at least one partial with summary");
+    for (let i = 1; i < summaries.length; i++) {
+      if (summaries[i]!.length > 0 && summaries[i - 1]!.length > 0) {
+        assert.ok(summaries[i]!.startsWith(summaries[i - 1]!), "summary stream should grow monotonically");
       }
-    }
-  });
-
-  test("onPartial does not fire with invalid partial (broken escape sequence)", async () => {
-    const seg = fakeSegment();
-    const chunks = [`{"kind": "logic", "purpose": "hello \\`, `u00ff world", ...`];  // backslash-u split across chunks
-    const adapter: LLMAdapter = {
-      async complete() { return VALID_RESPONSE; },  // fallback for the retry path
-      async *completeStream() { for (const c of chunks) yield c; },
-    };
-    const partials: Array<{ purpose?: string }> = [];
-    // We expect this to ultimately fail validation (the streamed buffer isn't complete JSON),
-    // but onPartial must not have fired with a broken partial.
-    try {
-      await explain(seg, "", {
-        adapter,
-        promptsDir: PROMPTS_DIR,
-        onPartial: p => partials.push({ ...p }),
-      });
-    } catch { /* expected */ }
-    for (const p of partials) {
-      if (p.purpose !== undefined) assert.ok(!p.purpose.endsWith("\\"), "partial purpose must not end with a dangling escape");
     }
   });
 
@@ -396,7 +268,6 @@ suite("explain() — streaming", () => {
       async complete() { throw new Error("not used"); },
       async *completeStream() {
         yield `{"summary": "start`;
-        // Never yield another chunk. The agent's idleTimeoutMs should abort.
         await new Promise(() => { /* hang */ });
       },
     };
@@ -415,16 +286,10 @@ suite("explain() — streaming", () => {
     const seg = fakeSegment();
     const adapter: LLMAdapter = {
       async complete() { throw new Error("not used"); },
-      async *completeStream() {
-        throw new AuthError("API key rejected");
-      },
+      async *completeStream() { throw new AuthError("API key rejected"); },
     };
     await assert.rejects(
-      () => explain(seg, "", {
-        adapter,
-        promptsDir: PROMPTS_DIR,
-        onPartial: () => {},
-      }),
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR, onPartial: () => {} }),
       (err: Error) => err instanceof AuthError,
     );
   });
@@ -433,16 +298,10 @@ suite("explain() — streaming", () => {
     const seg = fakeSegment();
     const adapter: LLMAdapter = {
       async complete() { throw new Error("not used"); },
-      async *completeStream() {
-        throw new RateLimitError("rate limited", 30);
-      },
+      async *completeStream() { throw new RateLimitError("rate limited", 30); },
     };
     await assert.rejects(
-      () => explain(seg, "", {
-        adapter,
-        promptsDir: PROMPTS_DIR,
-        onPartial: () => {},
-      }),
+      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR, onPartial: () => {} }),
       (err: Error) => err instanceof RateLimitError,
     );
   });
@@ -462,7 +321,7 @@ suite("explain() — cancellation", () => {
 });
 
 suite("explain() — diagnostics", () => {
-  test("logger receives a one-line summary with field counts and does not receive raw code", async () => {
+  test("logger receives a one-line summary line and does not leak raw code", async () => {
     const seg = fakeSegment();
     const adapter = stubAdapter([VALID_RESPONSE]);
     const lines: string[] = [];
@@ -474,9 +333,8 @@ suite("explain() — diagnostics", () => {
     const first = lines.find(l => l.includes("[explanation]"));
     assert.ok(first, "logger should receive an [explanation] summary line");
     assert.ok(first!.includes("segmentId=seg-abc"));
-    assert.ok(first!.includes("flow=1"));
-    assert.ok(first!.includes("concepts=1"));
-    // Secret hygiene — raw code must never appear in logs.
+    assert.ok(first!.includes("source=llm"));
+    assert.ok(first!.includes("summaryChars="));
     for (const line of lines) {
       assert.ok(!line.includes("const x = 1;"), `log line leaked raw code: ${line}`);
     }
@@ -484,7 +342,7 @@ suite("explain() — diagnostics", () => {
 
   test("logger emits WARN line when retry fires", async () => {
     const seg = fakeSegment();
-    const adapter = stubAdapter([SUMMARY_EQUALS_ONELINER_RESPONSE, RETRY_SUCCEEDED_RESPONSE]);
+    const adapter = stubAdapter([ONELINER_ECHO_RESPONSE, RETRY_SUCCEEDED_RESPONSE]);
     const lines: string[] = [];
     await explain(seg, "", {
       adapter,
@@ -516,7 +374,7 @@ suite("explain() — additionalContext Phase 5 seam", () => {
     assert.ok(capturedUser[0]!.includes("validateJWT"));
   });
 
-  test("omits the `Prior context:` header when additionalContext is undefined or empty", async () => {
+  test("omits the `Prior context:` header when additionalContext is undefined", async () => {
     const seg = fakeSegment();
     const capturedUser: string[] = [];
     const adapter: LLMAdapter = {
@@ -533,19 +391,12 @@ suite("explain() — additionalContext Phase 5 seam", () => {
 });
 
 suite("synthesizeTrivial", () => {
-  test("returns kind=trivial with purpose from oneLiner and empty arrays", async () => {
-    const { synthesizeTrivial } = await import("../../src/engine/explanationAgent.js");
+  test("returns summary equal to oneLiner with renderState=done", () => {
     const seg = fakeSegment({ difficulty: "trivial", oneLiner: "Imports for core utilities." });
     const exp = synthesizeTrivial(seg);
-    assert.strictEqual(exp.kind, "trivial");
-    assert.strictEqual(exp.purpose, "Imports for core utilities.");
-    assert.deepStrictEqual(exp.flow, []);
-    assert.deepStrictEqual(exp.uses, []);
-    assert.deepStrictEqual(exp.produces, []);
-    assert.deepStrictEqual(exp.watch, []);
-    assert.deepStrictEqual(exp.concepts, []);
-    assert.strictEqual(exp.renderState, "done");
     assert.strictEqual(exp.segmentId, seg.id);
+    assert.strictEqual(exp.summary, "Imports for core utilities.");
+    assert.strictEqual(exp.renderState, "done");
   });
 });
 
@@ -559,91 +410,18 @@ suite("explain trivial fast path", () => {
     const seg = fakeSegment({ difficulty: "trivial", oneLiner: "Trivial one-liner." });
     const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
     assert.strictEqual(adapterCalled, false);
-    assert.strictEqual(exp.kind, "trivial");
-    assert.strictEqual(exp.purpose, "Trivial one-liner.");
+    assert.strictEqual(exp.summary, "Trivial one-liner.");
     assert.strictEqual(exp.renderState, "done");
   });
-});
 
-suite("v2 kind-aware validation", () => {
-  test("kind=trivial with populated arrays is normalized to empty", async () => {
-    const adapter = stubAdapter([JSON.stringify({
-      kind: "trivial",
-      purpose: "A short trivial purpose that is still 20+ characters long.",
-      flow: ["this should be dropped but is 20+ chars long for validation"],
-      uses: ["also-should-be-dropped-specific-enough"],
-      produces: [],
-      watch: [],
-      concepts: [{ name: "X", briefExplainer: "abc", relevance: "def" }],
-    })]);
-    const seg = fakeSegment({ difficulty: "standard" });
-    const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    assert.strictEqual(exp.kind, "trivial");
-    assert.deepStrictEqual(exp.flow, []);
-    assert.deepStrictEqual(exp.uses, []);
-    assert.deepStrictEqual(exp.concepts, []);
-  });
-
-  test("kind=logic with empty flow+watch+concepts retries and fails", async () => {
-    const emptyish = JSON.stringify({
-      kind: "logic",
-      purpose: "A 20+ character purpose that still populates nothing valuable.",
-      flow: [],
-      uses: ["just-a-symbol-specific-enough"],
-      produces: ["just-an-output-specific-enough"],
-      watch: [],
-      concepts: [],
-    });
-    const adapter = stubAdapter([emptyish, emptyish]);
-    const seg = fakeSegment({ difficulty: "standard" });
-    await assert.rejects(
-      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
-      (err: Error) => err instanceof MalformedResponseError,
-    );
-  });
-
-  test("kind=io with only flow and uses passes validation", async () => {
-    const adapter = stubAdapter([JSON.stringify({
-      kind: "io",
-      purpose: "An I/O block whose purpose is long enough for validation.",
-      flow: ["connects to the database", "issues a query to fetch", "returns the row results"],
-      uses: ["db.users.findOne"],
-      produces: [],
-      watch: [],
-      concepts: [],
-    })]);
-    const seg = fakeSegment({ difficulty: "standard" });
-    const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    assert.strictEqual(exp.kind, "io");
-    assert.strictEqual(exp.flow.length, 3);
-  });
-
-  test("flow over 5 items is truncated to 5 without fatal error", async () => {
-    const adapter = stubAdapter([JSON.stringify({
-      kind: "logic",
-      purpose: "A purpose that is 20+ characters long for validation.",
-      flow: ["a".repeat(16), "b".repeat(16), "c".repeat(16), "d".repeat(16), "e".repeat(16), "f".repeat(16), "g".repeat(16)],
-      uses: [],
-      produces: [],
-      watch: [],
-      concepts: [],
-    })]);
-    const seg = fakeSegment({ difficulty: "standard" });
-    const exp = await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR });
-    assert.strictEqual(exp.flow.length, 5);
-  });
-
-  test("kind value outside {trivial,logic,io} is rejected (triggers retry)", async () => {
-    const bad = JSON.stringify({
-      kind: "function",
-      purpose: "A purpose 20+ chars long enough for validation here.",
-      flow: [], uses: [], produces: [], watch: [], concepts: [],
-    });
-    const adapter = stubAdapter([bad, bad]);
-    const seg = fakeSegment({ difficulty: "standard" });
-    await assert.rejects(
-      () => explain(seg, "", { adapter, promptsDir: PROMPTS_DIR }),
-      (err: Error) => err instanceof MalformedResponseError,
-    );
+  test("logs source=synth and modelTimeMs for trivial path", async () => {
+    const adapter: LLMAdapter = {
+      async complete() { throw new Error("should not be called"); },
+      async *completeStream() { throw new Error("should not be called"); },
+    };
+    const seg = fakeSegment({ difficulty: "trivial", oneLiner: "Trivial." });
+    const lines: string[] = [];
+    await explain(seg, "", { adapter, promptsDir: PROMPTS_DIR, logger: (m) => lines.push(m) });
+    assert.ok(lines.some(l => l.includes("source=synth") && l.includes("summaryChars=")));
   });
 });

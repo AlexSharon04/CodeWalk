@@ -27,13 +27,7 @@ function ctx(): vscode.ExtensionContext {
 }
 
 const VALID = JSON.stringify({
-  kind: "logic",
-  purpose: "A valid 20+char summary for this block's behavior.",
-  flow: ["This block does something useful."],
-  uses: [],
-  produces: [],
-  watch: [],
-  concepts: [],
+  summary: "A valid 40+char summary that explains the block's behavior and surfaces its watch points.",
 });
 
 suite("PrefetchQueue", () => {
@@ -63,13 +57,7 @@ suite("PrefetchQueue", () => {
     const store = new ExplanationStore(ctx());
     store.set("s1", "groq", "v1", {
       segmentId: "s1",
-      kind: "logic",
-      purpose: "already cached — this block was prefetched in a prior session.",
-      flow: [],
-      uses: [],
-      produces: [],
-      watch: [],
-      concepts: [],
+      summary: "already cached — this block was prefetched in a prior session and survives intact.",
       renderState: "done",
     });
     let calls = 0;

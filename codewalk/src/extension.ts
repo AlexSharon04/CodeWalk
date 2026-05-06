@@ -5,7 +5,7 @@ import { BlockHighlighter } from "./editor/highlights";
 import { registerStartWalkthrough } from "./commands/startWalkthrough";
 import { migrateLegacyApiKey, setApiKey } from "./utils/secrets";
 import { ExplanationStore } from "./engine/explanationStore";
-import { EXPLANATION_PROMPT_VERSION, synthesizeTrivial } from "./engine/explanationAgent";
+import { EXPLANATION_PROMPT_VERSION } from "./engine/explanationAgent";
 import { CodeWalkCommentController } from "./providers/commentController";
 import { PrefetchQueue } from "./engine/prefetchQueue";
 import { readUserConfig } from "./utils/config";
@@ -42,7 +42,6 @@ export function activate(context: vscode.ExtensionContext): void {
   let commentController: CodeWalkCommentController | undefined;
   let prefetchQueue: PrefetchQueue | undefined;
   let segmentStoreSub: vscode.Disposable | undefined;
-  let trivialSub: vscode.Disposable | undefined;
 
   // Async function to build the adapter and wire the controller + prefetch queue.
   async function rebuildWiring(): Promise<void> {
@@ -66,7 +65,6 @@ export function activate(context: vscode.ExtensionContext): void {
     commentController?.dispose();
     prefetchQueue?.dispose();
     segmentStoreSub?.dispose();
-    trivialSub?.dispose();
 
     // Build the comment controller.
     commentController = new CodeWalkCommentController(
@@ -81,21 +79,6 @@ export function activate(context: vscode.ExtensionContext): void {
         structuredOutputMode: resolved.structuredOutputMode,
       },
     );
-
-    // Eagerly pre-populate trivial explanations as segments are segmented.
-    trivialSub = store.onDidChange((uri) => {
-      const segs = store.get(uri);
-      if (!segs) return;
-      for (const seg of segs) {
-        if (seg.difficulty === "trivial") {
-          const cached = explanationStore.get(seg.id, resolved.backend, EXPLANATION_PROMPT_VERSION);
-          if (!cached) {
-            const trivialExp = synthesizeTrivial(seg);
-            explanationStore.set(seg.id, resolved.backend, EXPLANATION_PROMPT_VERSION, trivialExp);
-          }
-        }
-      }
-    });
 
     // Conditionally wire the prefetch queue.
     const prefetchEnabled = vscode.workspace
@@ -142,7 +125,6 @@ export function activate(context: vscode.ExtensionContext): void {
       commentController?.dispose();
       prefetchQueue?.dispose();
       segmentStoreSub?.dispose();
-      trivialSub?.dispose();
     },
   });
 
