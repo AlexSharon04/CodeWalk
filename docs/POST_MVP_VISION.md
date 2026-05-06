@@ -105,9 +105,14 @@ Clicking the breadcrumb shows the full trail. `Alt+Left` pops the trail and retu
 
 ### Phase 2 preservation
 
-Phase 2 leaves one hook for Phase 5 — `ExplanationDeps.additionalContext?: string` — which is always `undefined` in Phase 2. Phase 5 fills it from `SymbolContextStore`. No other Phase 2 surface changes for Phase 5 readiness.
+Phase 2 leaves one hook for Phase 5 — `ExplanationDeps.additionalContext?: string` — which is always `undefined` in Phase 2/2b/2c. Phase 5 fills it from `SymbolContextStore`. No other surface changes for Phase 5 readiness.
 
-**Additional Phase 2 → Phase 5 seam.** The Phase 2 schema redesign introduces a `uses: string[]` field that holds plain-text references to symbols each block leans on (e.g. `db.users`, `bcrypt.compare`). In Phase 2 these render as plain strings. When Phase 5 lands, those same strings become clickable `codewalk.walkToSymbol` command links — zero schema change, zero re-explanation needed. Respect this text-to-link progression when writing the Phase 5 spec.
+**Update 2026-05-06 — `uses`-seam dropped.** The `uses: string[]` text-to-link seam from the original Phase 2 design no longer exists. Phase 2c collapsed the explanation schema to a single `summary` string (3–5 sentences), dropping the `kind` / `purpose` / `flow` / `uses` / `produces` / `watch` / `concepts` fields entirely. Phase 5 must reintroduce structure to support clickable cross-file references. Two paths to consider:
+
+- **(a) Add back a structured `references` field** alongside `summary` (`{summary: string, references?: Reference[]}`), populated by the Phase 5 prompt when the symbol-context accumulator has prior sightings. This keeps Phase 2c's prose-first UX as the default and turns on structure only when there's something cross-file to surface.
+- **(b) Inline command-URI links inside the prose `summary`** so the LLM is responsible for emitting `[validateJWT](command:codewalk.walkToSymbol?…)` directly. Lower schema change, but the LLM has to escape command URIs correctly and Phase 2c's preamble/fence validation rules need a carve-out.
+
+(a) is cleaner; (b) is cheaper to ship. The Phase 5 spec should pick one and document the trade.
 
 ### Referenced brainstorms
 

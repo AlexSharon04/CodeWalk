@@ -1,16 +1,16 @@
 # CodeWalk — Project State
 
 **Last updated:** 2026-05-06
-**Current phase:** Phase 2c — single-narrative v3 schema + adjacent prefetch — **code complete, Phase 3 nav next**
+**Current phase:** Phase 2c + Phase 3 nav — **code complete, manual verification pending**
 **Current branch:** `phase2c-narrative-and-nav`
-**Current step:** Phase 2c steps 1-6 of 12 complete (schema migration + adjacent prefetch). Steps 7-12 (Phase 3 full nav) pending user verification of the v3 prose output and adjacent-prefetch behavior in the Extension Development Host before proceeding.
+**Current step:** All 12 steps of the Phase 2c plan are committed. Verification gate before merge to `main`: run the manual checklist below in the Extension Development Host and verify on both Anthropic and Groq presets per ADR-003.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
 - [x] Phase 2 — Level 1 Explanations — **code complete 2026-04-20; superseded by Phase 2b**
 - [x] Phase 2b — Adaptive kind-aware schema (kind + purpose + flow + uses + produces + watch + concepts) — **code complete 2026-04-20; superseded by Phase 2c**
-- [~] Phase 2c — Single-narrative v3 schema + adjacent prefetch — **schema + prefetch code complete 2026-05-06; Phase 3 nav slice (steps 7-12) pending**
-- [ ] Phase 3 — Navigation & File Queue (folded into Phase 2c slice)
+- [x] Phase 2c — Single-narrative v3 schema + adjacent prefetch — **code complete 2026-05-06**
+- [x] Phase 3 — Navigation & File Queue (folded into Phase 2c slice) — **code complete 2026-05-06**
 - [ ] Phase 4 — Level 2 & Polish
 
 ## Active artifacts
@@ -19,7 +19,7 @@
 - Phase 2 spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2-explanations.md` *(approved 2026-04-20; plan + implementation complete)*
 - Phase 2 plan: `docs/superpowers/plans/2026-04-20-codewalk-phase2-explanations.md` *(14 tasks, all complete)*
 - Phase 2b spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2b-adaptive-explanation.md` *(approved 2026-04-20; superseded by Phase 2c)*
-- **Phase 2c plan: `docs/superpowers/plans/2026-05-06-codewalk-phase2c-narrative-and-nav.md` *(approved 2026-05-06; steps 1-6 of 12 complete on `phase2c-narrative-and-nav` branch)***
+- **Phase 2c plan: `docs/superpowers/plans/2026-05-06-codewalk-phase2c-narrative-and-nav.md` *(approved 2026-05-06; all 12 steps complete on `phase2c-narrative-and-nav` branch)***
 - Post-MVP vision: `docs/POST_MVP_VISION.md` *(Phase 5 — Cross-file Intelligence — parked until Phase 4 ships; **Phase 5 `uses`-text-to-link seam was dropped with v3 single-narrative — see Phase 2c plan §Risks**)*
 - ADRs: `docs/ARCHITECTURE_DECISIONS.md` *(ADR-001, ADR-002, ADR-003, ADR-004, ADR-005 accepted)*
 - README with user testing instructions: `codewalk/README.md`
@@ -196,24 +196,54 @@ These pieces are already in place and Phase 2 can build on them without refactor
 
 ## What's next
 
-Phase 2c steps 7-12 (Phase 3 nav slice). User-action gate: verify v3 prose output and adjacent-prefetch behavior in Extension Development Host first.
+Phase 2c+3 verification, then Phase 4 (Level 2 line-by-line annotations + polish).
 
-### Phase 2c — verification before continuing
+### Phase 2c+3 — committed work
 
-Steps 1-6 are committed on `phase2c-narrative-and-nav`:
-1. ✅ Step 1-4 (commit `d8c739f`): v3 schema migration (single-narrative `summary` field; drops `kind`/`purpose`/`flow`/`uses`/`produces`/`watch`/`concepts` and the trivial pre-population eager write).
-2. ✅ Step 5-6 (commit `7a451b4`): `PrefetchQueue.enqueueNeighbors` with 200 ms throttle + `prefetchNeighborsOnClick` setting wired into the click path.
+All twelve steps of the Phase 2c plan landed on `phase2c-narrative-and-nav`:
 
-### Manual verification checklist (run before steps 7-12)
+| Step | Commit | Scope |
+|---|---|---|
+| 1-4 | `d8c739f` | v3 schema migration — single-narrative `summary` field, drop trivial pre-pop, prose prompt |
+| 5-6 | `7a451b4` | `PrefetchQueue.enqueueNeighbors` + 200 ms throttle, wired into the click path |
+| state | `5c3fccf` | PROJECT_STATE refresh + canonical plan copy |
+| 7 | `8e61480` | `WalkSession` service — file queue, active block, `codewalk.active` context key |
+| 8 | `aef7543` | `nextBlock` / `prevBlock` / `skipFile` commands + Alt+↓/↑/S keybindings |
+| 9 | `b8e3ab0` | Status bar progress indicator with click-to-jump QuickPick |
+| 10 | `9bc223d` | Sidebar TreeView ("Walkthrough Files") with checkbox-toggle add/remove |
+| 11 | `dbc7a52` | Cross-file auto-segmentation; shared `segmentFileForWalk` helper |
+| 12 | (this commit) | Docs |
+
+### Phase 2c+3 manual verification checklist
+
+#### Schema and rendering (Phase 2c)
 
 1. F5 in `codewalk/` to launch Extension Development Host. Open `codewalk/test/fixtures/sample.ts`.
-2. Run **Start CodeWalk**. Block labels appear; **no Output channel `[explanation]` lines should fire at this stage** (trivial pre-population is gone).
-3. Click any non-trivial CodeLens. Loader animates. Within ~3 s the panel should show a single italic 3–5 sentence prose paragraph — no `Flow` / `Uses` / `Produces` / `Watch` headers, no Concepts dropdown.
-4. Click a trivial block (top-of-file imports). Panel opens instantly with the segmenter's one-liner. No spinner, no LLM call (cache miss path triggers click-time `synthesizeTrivial`, no network).
+2. Run **Start CodeWalk**. Block labels appear; the CodeWalk activity-bar icon shows up.
+3. Click any non-trivial CodeLens. Loader animates with elapsed counter. Within ~3 s the panel shows a single 3–5 sentence prose paragraph — no `Flow` / `Uses` / `Produces` / `Watch` headers, no Concepts dropdown.
+4. Click a trivial block (imports). Panel opens instantly with the segmenter's one-liner. No spinner, no LLM call.
 5. Click block 5. Output channel should log `[prefetch]` activity for blocks 4 and 6 within ~200 ms.
-6. Click block 4 immediately after — panel should open instantly (prefetched).
-7. Run **CodeWalk: Reset Explanation Cache**. Re-click — should re-stream.
-8. Reload window with v2 entries in `globalState`. On activation, Output channel should log eviction count > 0; subsequent clicks re-stream against v3 schema.
-9. Verify on both Anthropic and Groq presets per ADR-003 dogfood warning.
+6. Click block 4 — opens instantly (prefetched).
+7. Run **CodeWalk: Reset Explanation Cache** — re-clicks re-stream.
+8. Reload window with v2 entries in `globalState`. Output channel logs eviction count > 0; subsequent clicks re-stream against v3.
 
-Steps 7-12 (Phase 3 nav: WalkSession service, Alt+↓/↑/S keybindings, status bar, sidebar TreeView, multi-file queue, docs) start once the above checklist is green.
+#### Navigation (Phase 3)
+
+9. After Start CodeWalk, the **status bar** at bottom-left reads `$(book) CodeWalk: File 1/1 | Block —/N`.
+10. Click any block — status bar updates to `Block X/N`.
+11. Press **Alt+↓** — cursor jumps to next block, panel expands. Status bar updates.
+12. Press **Alt+↑** — cursor returns to previous block.
+13. Press **Alt+↑/↓** at file boundaries with no other queued file — info toast surfaces, no error.
+14. Open the **CodeWalk activity bar** (book icon). The "Walkthrough Files" tree shows workspace files; the active file is checked.
+15. Check a second file in the sidebar. Press **Alt+↓** repeatedly through the active file. At the last block, Alt+↓ kicks off a "CodeWalk: Analyzing <new file>…" progress notification, then jumps into the first block of the new file.
+16. Press **Alt+S** mid-file — the file is dropped from the queue; nav advances to the next file.
+17. Click the status bar item — a QuickPick lists every analyzed block in the active file with label / one-liner / line range / difficulty. Picking one jumps + expands.
+18. Verify **Move Line Up/Down** still works in plain editor focus when CodeWalk is inactive (no file queued / no segments computed).
+
+#### Backends
+
+19. Verify the full flow once on Anthropic and once on Groq per ADR-003 dogfood warning.
+
+### Phase 4 (next)
+
+Once the checklist is green, Phase 4 (Level 2 line-by-line annotations + polish — see `docs/IMPLEMENTATION_PLAN.md`) is the next slice. The current branch can merge to `main` then. Until then, hold the branch.
