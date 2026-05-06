@@ -1,0 +1,48 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "167727eb1beb",
+  "session_id": "44bfdf28-d32f-43be-9061-1c146866f5e7",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-06T22:49:35.6143596Z",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codewalk/src/types/index.ts",
+    "codewalk/src/engine/explanationAgent.ts",
+    "codewalk/prompts/explanation.md",
+    "codewalk/src/providers/commentController.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/src/engine/explanationStore.ts",
+    "codewalk/src/engine/prefetchQueue.ts",
+    "codewalk/test/suite/explanationAgent.test.ts",
+    "codewalk/test/suite/commentController.test.ts",
+    "codewalk/test/suite/explanationStore.test.ts",
+    "codewalk/test/suite/prefetchQueue.test.ts",
+    "codewalk/test/eval/explanationEval.test.ts",
+    "codewalk/test/integration/explanationLive.test.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "11a49b667457",
+  "checkpoint_transcript_start": 387,
+  "transcript_lines_at_start": 387,
+  "token_usage": {
+    "input_tokens": 12149,
+    "cache_creation_tokens": 220134,
+    "cache_read_tokens": 6010555,
+    "output_tokens": 40162,
+    "api_call_count": 30
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-06T22:49:32.6788607Z",
+    "agent_lines": 167,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 167,
+    "agent_percentage": 100
+  }
+}

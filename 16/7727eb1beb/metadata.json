@@ -1,0 +1,37 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "167727eb1beb",
+  "strategy": "manual-commit",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codewalk/prompts/explanation.md",
+    "codewalk/src/engine/explanationAgent.ts",
+    "codewalk/src/engine/explanationStore.ts",
+    "codewalk/src/engine/prefetchQueue.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/src/providers/commentController.ts",
+    "codewalk/src/types/index.ts",
+    "codewalk/test/eval/explanationEval.test.ts",
+    "codewalk/test/integration/explanationLive.test.ts",
+    "codewalk/test/suite/commentController.test.ts",
+    "codewalk/test/suite/explanationAgent.test.ts",
+    "codewalk/test/suite/explanationStore.test.ts",
+    "codewalk/test/suite/prefetchQueue.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/16/7727eb1beb/0/metadata.json",
+      "transcript": "/16/7727eb1beb/0/full.jsonl",
+      "content_hash": "/16/7727eb1beb/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12149,
+    "cache_creation_tokens": 220134,
+    "cache_read_tokens": 6010555,
+    "output_tokens": 40162,
+    "api_call_count": 30
+  }
+}
