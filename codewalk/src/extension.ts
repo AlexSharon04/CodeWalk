@@ -3,6 +3,7 @@ import { SegmentStore } from "./engine/segmentStore";
 import { CodeWalkLensProvider } from "./providers/codeLensProvider";
 import { BlockHighlighter } from "./editor/highlights";
 import { registerStartWalkthrough } from "./commands/startWalkthrough";
+import { registerBlockNavCommands } from "./commands/blockNav";
 import { migrateLegacyApiKey, setApiKey } from "./utils/secrets";
 import { ExplanationStore } from "./engine/explanationStore";
 import { EXPLANATION_PROMPT_VERSION } from "./engine/explanationAgent";
@@ -32,6 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   const startCommand = registerStartWalkthrough(context, store, output, walkSession);
+  const navCommands = registerBlockNavCommands(walkSession, store);
 
   // Logger for modules that need structured output.
   const logger = (msg: string) => output.appendLine(msg);
@@ -191,6 +193,7 @@ export function activate(context: vscode.ExtensionContext): void {
     resetApiKeyCommand,
     resetExplanationCacheCommand,
     closeHandler,
+    ...navCommands,
   );
 
   output.appendLine("CodeWalk activated.");

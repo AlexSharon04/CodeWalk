@@ -10,14 +10,37 @@
   "activationEvents": [
     "onCommand:codewalk.startWalkthrough",
     "onCommand:codewalk.resetApiKey",
-    "onCommand:codewalk.resetExplanationCache"
+    "onCommand:codewalk.resetExplanationCache",
+    "onCommand:codewalk.nextBlock",
+    "onCommand:codewalk.prevBlock",
+    "onCommand:codewalk.skipFile"
   ],
   "contributes": {
     "commands": [
       { "command": "codewalk.startWalkthrough", "title": "Start CodeWalk", "icon": "$(book)" },
       { "command": "codewalk.expandBlock", "title": "Expand Block" },
       { "command": "codewalk.resetApiKey", "title": "CodeWalk: Reset API Key" },
-      { "command": "codewalk.resetExplanationCache", "title": "CodeWalk: Reset Explanation Cache" }
+      { "command": "codewalk.resetExplanationCache", "title": "CodeWalk: Reset Explanation Cache" },
+      { "command": "codewalk.nextBlock", "title": "CodeWalk: Next Block" },
+      { "command": "codewalk.prevBlock", "title": "CodeWalk: Previous Block" },
+      { "command": "codewalk.skipFile", "title": "CodeWalk: Skip File" }
+    ],
+    "keybindings": [
+      {
+        "command": "codewalk.nextBlock",
+        "key": "alt+down",
+        "when": "codewalk.active && editorTextFocus && !suggestWidgetVisible"
+      },
+      {
+        "command": "codewalk.prevBlock",
+        "key": "alt+up",
+        "when": "codewalk.active && editorTextFocus && !suggestWidgetVisible"
+      },
+      {
+        "command": "codewalk.skipFile",
+        "key": "alt+s",
+        "when": "codewalk.active"
+      }
     ],
     "configuration": {
       "title": "CodeWalk",
