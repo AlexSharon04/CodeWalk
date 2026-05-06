@@ -1,0 +1,40 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "bfea88ff5346",
+  "session_id": "44bfdf28-d32f-43be-9061-1c146866f5e7",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-06T22:53:43.9514892Z",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codewalk/src/engine/prefetchQueue.ts",
+    "codewalk/src/providers/commentController.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/package.json",
+    "codewalk/test/suite/prefetchQueue.test.ts"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "11a49b667457",
+  "checkpoint_transcript_start": 1312,
+  "transcript_lines_at_start": 1312,
+  "token_usage": {
+    "input_tokens": 12,
+    "cache_creation_tokens": 24245,
+    "cache_read_tokens": 3104377,
+    "output_tokens": 16327,
+    "api_call_count": 12
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-06T22:53:36.6317064Z",
+    "agent_lines": 191,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 191,
+    "agent_percentage": 100
+  }
+}
