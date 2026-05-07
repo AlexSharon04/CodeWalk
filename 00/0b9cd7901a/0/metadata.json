@@ -1,0 +1,31 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "000b9cd7901a",
+  "session_id": "a2e0aa8f-4705-4d9c-a1f4-03f49d08baef",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-07T16:32:41.4978972Z",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".gitignore"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "988e59db7f9f",
+  "token_usage": {
+    "input_tokens": 49,
+    "cache_creation_tokens": 74655,
+    "cache_read_tokens": 589996,
+    "output_tokens": 8801,
+    "api_call_count": 10
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-07T16:32:41.3082451Z",
+    "agent_lines": 17,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 17,
+    "agent_percentage": 100
+  }
+}
