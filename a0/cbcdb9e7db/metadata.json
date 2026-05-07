@@ -1,0 +1,31 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "a0cbcdb9e7db",
+  "strategy": "manual-commit",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".claude/settings.json",
+    ".claude/settings.local.json",
+    ".entire/.gitignore",
+    ".entire/settings.json",
+    ".gitignore",
+    "bash.exe.stackdump",
+    "codewalk/bash.exe.stackdump"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a0/cbcdb9e7db/0/metadata.json",
+      "transcript": "/a0/cbcdb9e7db/0/full.jsonl",
+      "content_hash": "/a0/cbcdb9e7db/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1,
+    "cache_creation_tokens": 470,
+    "cache_read_tokens": 74655,
+    "output_tokens": 1474,
+    "api_call_count": 1
+  }
+}
