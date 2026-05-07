@@ -1,0 +1,40 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "5d11c01b4f8c",
+  "strategy": "manual-commit",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "codewalk/package.json",
+    "codewalk/prompts/lineByLine.md",
+    "codewalk/src/commands/toggleLineByLine.ts",
+    "codewalk/src/editor/lineByLineDecorator.ts",
+    "codewalk/src/engine/lineByLineAgent.ts",
+    "codewalk/src/engine/lineByLineStore.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/src/providers/commentController.ts",
+    "codewalk/src/providers/lineByLineHoverProvider.ts",
+    "codewalk/src/types/index.ts",
+    "codewalk/test/eval/lineByLineEval.test.ts",
+    "codewalk/test/suite/lineByLineAgent.test.ts",
+    "codewalk/test/suite/lineByLineDecorator.test.ts",
+    "codewalk/test/suite/lineByLineStore.test.ts",
+    "docs/PROJECT_STATE.md",
+    "docs/superpowers/plans/2026-05-06-codewalk-phase4-line-by-line.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/5d/11c01b4f8c/0/metadata.json",
+      "transcript": "/5d/11c01b4f8c/0/full.jsonl",
+      "content_hash": "/5d/11c01b4f8c/0/content_hash.txt",
+      "prompt": "/5d/11c01b4f8c/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 62,
+    "cache_creation_tokens": 215214,
+    "cache_read_tokens": 11609239,
+    "output_tokens": 52605,
+    "api_call_count": 57
+  }
+}

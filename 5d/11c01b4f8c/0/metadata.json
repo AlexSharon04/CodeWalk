@@ -1,0 +1,51 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "5d11c01b4f8c",
+  "session_id": "e46e5752-d808-4724-b1d9-22af4022658e",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-07T00:27:10.8581724Z",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/superpowers/plans/2026-05-06-codewalk-phase4-line-by-line.md",
+    "codewalk/src/types/index.ts",
+    "codewalk/prompts/lineByLine.md",
+    "codewalk/src/engine/lineByLineAgent.ts",
+    "codewalk/src/engine/lineByLineStore.ts",
+    "codewalk/src/editor/lineByLineDecorator.ts",
+    "codewalk/src/providers/lineByLineHoverProvider.ts",
+    "codewalk/src/providers/commentController.ts",
+    "codewalk/src/commands/toggleLineByLine.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/package.json",
+    "codewalk/test/suite/lineByLineAgent.test.ts",
+    "codewalk/test/suite/lineByLineDecorator.test.ts",
+    "codewalk/test/suite/lineByLineStore.test.ts",
+    "codewalk/test/eval/lineByLineEval.test.ts",
+    "docs/PROJECT_STATE.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "e927a58f97df",
+  "checkpoint_transcript_start": 1146,
+  "transcript_lines_at_start": 1146,
+  "token_usage": {
+    "input_tokens": 62,
+    "cache_creation_tokens": 215214,
+    "cache_read_tokens": 11609239,
+    "output_tokens": 52605,
+    "api_call_count": 57
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-07T00:27:06.1433888Z",
+    "agent_lines": 1695,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1695,
+    "agent_percentage": 100
+  }
+}
