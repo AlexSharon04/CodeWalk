@@ -9,6 +9,11 @@ import { ExplanationStore } from "./engine/explanationStore";
 import { EXPLANATION_PROMPT_VERSION } from "./engine/explanationAgent";
 import { CodeWalkCommentController } from "./providers/commentController";
 import { PrefetchQueue } from "./engine/prefetchQueue";
+import { LineByLineStore } from "./engine/lineByLineStore";
+import { LINE_BY_LINE_PROMPT_VERSION } from "./engine/lineByLineAgent";
+import { LineByLineDecorator } from "./editor/lineByLineDecorator";
+import { LineByLineHoverProvider } from "./providers/lineByLineHoverProvider";
+import { registerToggleLineByLine } from "./commands/toggleLineByLine";
 import { WalkSession } from "./services/walkSession";
 import { CodeWalkStatusBar } from "./services/statusBar";
 import { SegmentationStatusTracker } from "./services/segmentationStatusTracker";
@@ -74,10 +79,23 @@ export function activate(context: vscode.ExtensionContext): void {
   const explanationStore = new ExplanationStore(context, logger, EXPLANATION_PROMPT_VERSION);
   context.subscriptions.push(explanationStore);
 
+  // Line-by-line: store + decorator + hover provider live for the whole activation;
+  // the agent deps (adapter + preset) are rebuilt on config change via rebuildWiring.
+  const lineByLineStore = new LineByLineStore(context, logger, LINE_BY_LINE_PROMPT_VERSION);
+  const lineByLineDecorator = new LineByLineDecorator();
+  const lineByLineHoverProvider = new LineByLineHoverProvider(lineByLineDecorator);
+  const lineByLineHoverRegistration = vscode.languages.registerHoverProvider(
+    { scheme: "file" },
+    lineByLineHoverProvider,
+  );
+  context.subscriptions.push(lineByLineStore, lineByLineDecorator, lineByLineHoverRegistration);
+
   // Closure-scoped state for dynamic wiring.
   let commentController: CodeWalkCommentController | undefined;
   let prefetchQueue: PrefetchQueue | undefined;
   let segmentStoreSub: vscode.Disposable | undefined;
+  let activePreset: string | undefined;
+  let activeLineByLineAgentDeps: import("./engine/lineByLineAgent").LineByLineDeps | undefined;
 
   // Async function to build the adapter and wire the controller + prefetch queue.
   async function rebuildWiring(): Promise<void> {
@@ -137,6 +155,15 @@ export function activate(context: vscode.ExtensionContext): void {
         walkSession,
       },
     );
+
+    // Update line-by-line agent deps for the toggle command.
+    activePreset = resolved.backend;
+    activeLineByLineAgentDeps = {
+      adapter,
+      promptsDir: context.asAbsolutePath("prompts"),
+      structuredOutputMode: resolved.structuredOutputMode,
+      logger,
+    };
 
     // Opt-in: also prefetch every non-trivial block at segmentation time.
     const prefetchOnSegmentation = vscode.workspace
@@ -209,15 +236,34 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
+  const resetLineByLineCacheCommand = vscode.commands.registerCommand(
+    "codewalk.resetLineByLineCache",
+    () => {
+      lineByLineStore.clear();
+      lineByLineDecorator.clearAll();
+      vscode.window.showInformationMessage("CodeWalk: line-by-line cache cleared.");
+    },
+  );
+
   const endWalkthroughCommand = vscode.commands.registerCommand(
     "codewalk.endWalkthrough",
     () => {
       commentController?.collapse();
+      lineByLineDecorator.clearAll();
       store.clearAll();
       walkSession.end();
       output.appendLine("[walkthrough] ended by user");
     },
   );
+
+  const toggleLineByLineCommand = registerToggleLineByLine({
+    commentController: () => commentController,
+    decorator: lineByLineDecorator,
+    store: lineByLineStore,
+    preset: () => activePreset,
+    agentDeps: () => activeLineByLineAgentDeps,
+    logger,
+  });
 
   const closeHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
     store.clear(doc.uri);
@@ -270,7 +316,9 @@ export function activate(context: vscode.ExtensionContext): void {
     expandBlockCommand,
     resetApiKeyCommand,
     resetExplanationCacheCommand,
+    resetLineByLineCacheCommand,
     endWalkthroughCommand,
+    toggleLineByLineCommand,
     closeHandler,
     activeEditorListener,
     ...navCommands,

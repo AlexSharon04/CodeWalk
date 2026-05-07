@@ -11,7 +11,9 @@
     "onCommand:codewalk.startWalkthrough",
     "onCommand:codewalk.resetApiKey",
     "onCommand:codewalk.resetExplanationCache",
+    "onCommand:codewalk.resetLineByLineCache",
     "onCommand:codewalk.endWalkthrough",
+    "onCommand:codewalk.toggleLineByLine",
     "onCommand:codewalk.nextBlock",
     "onCommand:codewalk.prevBlock",
     "onCommand:codewalk.skipFile"
@@ -26,6 +28,8 @@
       { "command": "codewalk.prevBlock", "title": "CodeWalk: Previous Block" },
       { "command": "codewalk.skipFile", "title": "CodeWalk: Skip File" },
       { "command": "codewalk.endWalkthrough", "title": "CodeWalk: End Walkthrough", "icon": "$(close)" },
+      { "command": "codewalk.toggleLineByLine", "title": "CodeWalk: Toggle Line-by-Line", "icon": "$(list-tree)" },
+      { "command": "codewalk.resetLineByLineCache", "title": "CodeWalk: Reset Line-by-Line Cache" },
       { "command": "codewalk.refreshFileQueue", "title": "CodeWalk: Refresh File List", "icon": "$(refresh)" }
     ],
     "viewsContainers": {
@@ -54,6 +58,13 @@
           "command": "codewalk.refreshFileQueue",
           "when": "view == codewalk.fileQueue",
           "group": "navigation@3"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "codewalk.toggleLineByLine",
+          "when": "commentController == codewalk && commentThread == codewalk.thread",
+          "group": "inline@1"
         }
       ]
     },

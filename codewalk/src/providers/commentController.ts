@@ -62,6 +62,11 @@ export class CodeWalkCommentController implements vscode.Disposable {
     return this.openSegment?.id;
   }
 
+  openSegmentInfo(): { segment: Segment; uri: vscode.Uri } | undefined {
+    if (!this.openSegment || !this.openThread) return undefined;
+    return { segment: this.openSegment, uri: this.openThread.uri };
+  }
+
   currentThreadBody(): string | undefined {
     if (!this.openThread) return undefined;
     const c = this.openThread.comments[0];
@@ -139,6 +144,7 @@ export class CodeWalkCommentController implements vscode.Disposable {
     thread.label = this.buildThreadLabel(uri, segment);
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
     thread.canReply = false;
+    thread.contextValue = "codewalk.thread";
     thread.comments = [new CodeWalkComment(new vscode.MarkdownString("_Analyzing…_"))];
     this.openThread = thread;
     this.openSegment = segment;

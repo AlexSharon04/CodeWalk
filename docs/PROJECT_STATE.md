@@ -1,9 +1,9 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-05-06 (final-sprint UX polish landed)
-**Current phase:** Phase 2c + Phase 3 nav + **Final UX-polish sprint shipped**. Phase 4 line-by-line annotations remain parked as the next sprint.
-**Current branch:** `phase2c-narrative-and-nav` (12+ commits ahead of `phase1-core-loop`)
-**Current step:** Branch is ready to merge once manual verification on both Anthropic and Groq presets passes. The final-sprint UX work landed here — see "Final-sprint shipped (2026-05-06)" below. Phase 4 line-by-line is now the only outstanding feature track.
+**Last updated:** 2026-05-06 (Phase 4 line-by-line landed — MVP feature-complete)
+**Current phase:** Phase 2c + Phase 3 nav + Final UX-polish sprint + **Phase 4 line-by-line — all shipped**. The MVP design from `docs/CodeWalk-design-doc.md` is now feature-complete. Phase 5 (cross-file intelligence) remains parked in `docs/POST_MVP_VISION.md`.
+**Current branch:** `phase2c-narrative-and-nav` (14+ commits ahead of `phase1-core-loop`)
+**Current step:** Branch is ready to merge once manual verification on both Anthropic and Groq presets passes for: Phase 2c+3 nav, the final-sprint UX polish, AND Phase 4 line-by-line. Three checklists below.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
@@ -11,7 +11,7 @@
 - [x] Phase 2b — Adaptive kind-aware schema (kind + purpose + flow + uses + produces + watch + concepts) — **code complete 2026-04-20; superseded by Phase 2c**
 - [x] Phase 2c — Single-narrative v3 schema + adjacent prefetch — **code complete 2026-05-06**
 - [x] Phase 3 — Navigation & File Queue (folded into Phase 2c slice) — **code complete 2026-05-06**
-- [ ] Phase 4 — Level 2 & Polish
+- [x] Phase 4 — Level 2 & Polish — **code complete 2026-05-06** (line-by-line annotations + HoverProvider + dispose lifecycle; Phase 4 deliverable #4 — difficulty-colored CodeLens — already shipped in the final-sprint commit)
 
 ## Active artifacts
 - Phase 1 spec: `docs/superpowers/specs/2026-04-17-codewalk-phase1-core-loop.md` *(approved 2026-04-17)*
@@ -20,6 +20,8 @@
 - Phase 2 plan: `docs/superpowers/plans/2026-04-20-codewalk-phase2-explanations.md` *(14 tasks, all complete)*
 - Phase 2b spec: `docs/superpowers/specs/2026-04-20-codewalk-phase2b-adaptive-explanation.md` *(approved 2026-04-20; superseded by Phase 2c)*
 - **Phase 2c plan: `docs/superpowers/plans/2026-05-06-codewalk-phase2c-narrative-and-nav.md` *(approved 2026-05-06; all 12 steps complete on `phase2c-narrative-and-nav` branch)***
+- **Final-sprint UX-polish plan: `docs/superpowers/plans/2026-05-06-codewalk-final-sprint-ux-polish.md` *(approved 2026-05-06; 6 features shipped)***
+- **Phase 4 plan: `docs/superpowers/plans/2026-05-06-codewalk-phase4-line-by-line.md` *(approved 2026-05-06; line-by-line agent + decorator + HoverProvider + toggle command + eval harness shipped)***
 - Post-MVP vision: `docs/POST_MVP_VISION.md` *(Phase 5 — Cross-file Intelligence — parked until Phase 4 ships; **Phase 5 `uses`-text-to-link seam was dropped with v3 single-narrative — see Phase 2c plan §Risks**)*
 - ADRs: `docs/ARCHITECTURE_DECISIONS.md` *(ADR-001, ADR-002, ADR-003, ADR-004, ADR-005 accepted)*
 - README with user testing instructions: `codewalk/README.md`
@@ -136,6 +138,8 @@ None for Phase 1 closure. Phase 2 spec will open the following:
 - Visual signal for "only one panel open at a time".
 
 ## Recent decisions
+- **2026-05-06** — **Phase 4 line-by-line annotations shipped.** Closes the original CodeWalk MVP design (design-doc §4.2). Single new agent at `src/engine/lineByLineAgent.ts` following the ADR-005 contract — schema `{ annotations: [{line:int, short:string≤60, full:string}] }`, per-item validation (line in block range, no preamble, length caps), cross-item validation (sorted ascending, no duplicate lines), single-retry. `LineByLineStore` is independent of `ExplanationStore` so each cache invalidates independently and an agent failure can't poison the summary cache. Render uses ONE shared `TextEditorDecorationType` reused across every range (design-doc §12.5 leak guard); per-line `after.contentText` lives on per-range `DecorationOptions`. `HoverProvider` reads the decorator's `Map<uri, Map<line, full>>` for hover bodies — no parallel store. Toggle command on the comment thread title bar (`commentController == codewalk && commentThread == codewalk.thread`). Skipped streaming intentionally — per-line render is hard to stream cleanly and the user's gesture ("show me more depth") tolerates a single ~5–15 s progress-notification wait. Phase 4 deliverable #4 (CodeLens difficulty colors) already shipped in the prior commit. Eval harness env-gated by `EVAL_LINEBYLINE=1` with loose thresholds.
+- **2026-05-06** — **Final-sprint UX polish shipped.** End Walkthrough command + dispose lifecycle, sidebar segmentation status icons (✓/spinner/○), background pre-segmentation setting (`codewalk.preSegmentQueuedFiles`, default false), CodeLens difficulty icons, `onDidChangeActiveTextEditor` listener, status-bar visibility one-time hint. New `SegmentationStatusTracker` service is the model for any future "currently doing X" signal — UI-agnostic, just a `Set<string>` + `EventEmitter`.
 - **2026-05-06** — **Phase 2c + Phase 3 nav slice shipped.** Twelve-step plan landed in 11 commits on `phase2c-narrative-and-nav`. Highlights: (1) Single-narrative v3 schema replacing the 6-field kind-aware v2 — `summary` only, prose 3–5 sentences, eliminates the broken `<details>` Concepts render and the over-padded watch/produces fields. Net -500 lines on the schema/agent/renderer. (2) Adjacent-block prefetch with 200 ms throttle/merge so rapid Alt+↑/↓ stepping doesn't spawn N cancelled batches. (3) Phase 3 nav in full: `WalkSession` service, Alt+↓/↑/S keybindings, status bar progress indicator, sidebar TreeView with checkbox-toggle queue, cross-file auto-segmentation via shared `segmentFileForWalk` helper. Trivial pre-population (Phase 2b) removed — click-time `synthesizeTrivial` short-circuit kept so trivial blocks still feel instant.
 - **2026-05-06** — **Phase 5 `uses`-text-to-link seam dropped.** v3 single-narrative collapses the entire structured schema; `uses: string[]` no longer exists. POST_MVP_VISION.md updated with two paths for the Phase 5 spec to reintroduce structure: (a) add a `references` field alongside `summary`, or (b) inline command-URI links inside the prose. Path (a) is cleaner; (b) is cheaper.
 - **2026-05-06** — **Start CodeWalk made queue-aware.** Originally Start CodeWalk only segmented `activeTextEditor.document.uri`, which made multi-file walkthroughs impossible to construct from the sidebar checkboxes (queue formed but never had multiple segmented files). Now: queue takes precedence (segments first un-segmented queued file), falls back to active editor for the single-file demo flow, and surfaces a self-explanatory hint when neither is available. Sidebar gained a Start title-bar button + `viewsWelcome` for discoverability.
@@ -282,11 +286,47 @@ Out of scope (deferred to next sprint): **Phase 4 line-by-line annotations** —
 5. **Status bar hint.** First time CodeWalk activates a walkthrough on this profile, a one-time toast fires. Run Start CodeWalk again — no toast. Reload window — no toast.
 6. **No regressions.** Phase 2c+3 manual checklist (above) still passes.
 
-### Final sprint scope (next session)
+### Phase 4 — line-by-line annotations (shipped 2026-05-06)
 
-Two layers — Phase 4 (planned) and UX-polish backlog (raised this session). Both can be one slice or split.
+The last MVP-vision feature. Plan: `docs/superpowers/plans/2026-05-06-codewalk-phase4-line-by-line.md`.
 
-**Note (2026-05-06):** the UX-polish backlog has now landed; only Phase 4 line-by-line remains.
+| Component | File(s) |
+|---|---|
+| `LineAnnotation` + `LineByLine` types | `src/types/index.ts` |
+| `prompts/lineByLine.md` | `prompts/lineByLine.md` |
+| ADR-005-compliant agent (`annotate`, `LineByLineTooLargeError`, `LINE_BY_LINE_PROMPT_VERSION = "v1"`, schema, per-item + cross-item validation, single retry) | `src/engine/lineByLineAgent.ts` |
+| `LineByLineStore` (mirrors `ExplanationStore`; key prefix `lineByLine:`; version-gated rehydrate sweep) | `src/engine/lineByLineStore.ts` |
+| `LineByLineDecorator` — **ONE** `TextEditorDecorationType` reused across all ranges per design-doc §12.5; per-line `after.contentText` carried by `DecorationOptions.renderOptions` | `src/editor/lineByLineDecorator.ts` |
+| `LineByLineHoverProvider` — `Map<uri, Map<line, full>>` lookup via the decorator | `src/providers/lineByLineHoverProvider.ts` |
+| `codewalk.toggleLineByLine` command + comment-thread title-bar contribution gated on `commentThread == codewalk.thread` | `src/commands/toggleLineByLine.ts`, `src/extension.ts`, `package.json` |
+| `codewalk.resetLineByLineCache` palette command | `src/extension.ts`, `package.json` |
+| End Walkthrough now also runs `lineByLineDecorator.clearAll()` | `src/extension.ts` |
+| Eval harness gated by `EVAL_LINEBYLINE=1` (≥30% line coverage, ≤60-char shorts, sorted, no duplicates) | `test/eval/lineByLineEval.test.ts` |
+| Unit tests for agent, store, decorator | `test/suite/lineByLineAgent.test.ts`, `test/suite/lineByLineStore.test.ts`, `test/suite/lineByLineDecorator.test.ts` |
+
+### Phase 4 manual verification checklist
+
+1. F5 in `codewalk/`. Open `codewalk/test/fixtures/sample.ts`.
+2. Run **Start CodeWalk**. Click any non-trivial CodeLens — the existing summary panel opens.
+3. The panel's title bar shows a new **inline `$(list-tree)` button** (CodeWalk: Toggle Line-by-Line).
+4. Click it. Progress notification: `CodeWalk: line-by-line annotations…`.
+5. Within ~5–15 s (depending on backend), inline grey italic annotations appear next to non-obvious lines: `  ⟵ <short>`. The summary panel itself is unchanged.
+6. Hover any annotated line. A markdown tooltip appears with the full body.
+7. Hover a non-annotated line. **No tooltip** (provider returns undefined).
+8. Click the toggle button again. Annotations **disappear**.
+9. Click again — they re-apply **instantly** (cache hit).
+10. Run **CodeWalk: End Walkthrough**. All decorations vanish (block highlights AND line-by-line). Sidebar checkboxes clear, status bar hides.
+11. Run **CodeWalk: Reset Line-by-Line Cache** — re-toggling re-streams.
+12. On a 200+ line block: toggle fires `LineByLineTooLargeError` toast; no hang.
+13. On a freshly-edited block (segmenter re-runs → new segmentId): line-by-line cache misses, refetches.
+
+Build verification: `cd codewalk && npx tsc --noEmit && npm run build && npm run compile-tests` — all clean. F5 EDH for the manual checklist.
+
+### Followups
+
+- **Phase 5 — Cross-file intelligence.** Spec parked in `docs/POST_MVP_VISION.md`. Phase 4's `full` markdown bodies are the natural seam for command-URI links to jump-to-definition once Phase 5 lands.
+- **Edit-aware annotation invalidation.** When the user edits the file, line numbers drift and decorations sit on the wrong line. Same fragility as the existing block highlights. Defer until users complain.
+- **Per-file dispose policy revisit.** UX call still pending — current behavior keeps decorations as breadcrumbs.
 
 #### Phase 4 — Level 2 & polish (per `docs/IMPLEMENTATION_PLAN.md` §Phase 4)
 
