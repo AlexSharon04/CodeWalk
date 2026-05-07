@@ -1,0 +1,26 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "274d62651a54",
+  "strategy": "manual-commit",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "CodeWalk-design-doc.md",
+    "docs/CodeWalk-design-doc.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/27/4d62651a54/0/metadata.json",
+      "transcript": "/27/4d62651a54/0/full.jsonl",
+      "content_hash": "/27/4d62651a54/0/content_hash.txt",
+      "prompt": "/27/4d62651a54/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 30910,
+    "cache_creation_tokens": 726584,
+    "cache_read_tokens": 30528796,
+    "output_tokens": 187344,
+    "api_call_count": 118
+  }
+}
