@@ -1,6 +1,8 @@
 # Local agent / IDE state
 .claude/
-.entire/
+# .entire/ is intentionally tracked — it is the AI agent session log
+# the course expects to see. Its own .entire/.gitignore excludes
+# tmp/, metadata/, logs/, and settings.local.json.
 
 # Node / build artifacts
 node_modules/
