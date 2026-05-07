@@ -1,0 +1,1 @@
+add an end walkthrough feature so files that have codewalk running are persistent until the end
