@@ -1,0 +1,17 @@
+# Local agent / IDE state
+.claude/
+.entire/
+
+# Node / build artifacts
+node_modules/
+out/
+dist/
+*.vsix
+
+# OS / shell crash dumps
+*.stackdump
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
