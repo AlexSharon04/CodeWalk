@@ -5,6 +5,7 @@ import { OpenAICompatibleAdapter } from "../llm/openAiCompatibleAdapter";
 import { isOllamaReachable } from "../llm/ollamaDetection";
 import { FileTooLargeError, segment } from "../engine/segmenter";
 import type { SegmentStore } from "../engine/segmentStore";
+import type { SegmentationStatusTracker } from "../services/segmentationStatusTracker";
 import {
   AuthError,
   CancelledError,
@@ -22,6 +23,15 @@ export interface SegmentFileResult {
   segmentCount: number;
 }
 
+export interface SegmentFileOptions {
+  /** When true, run progress in the status bar instead of a notification. */
+  readonly silent?: boolean;
+  /** Optional tracker so the sidebar can render an in-flight spinner. */
+  readonly tracker?: SegmentationStatusTracker;
+  /** Optional cancellation token for fire-and-forget background runs. */
+  readonly externalToken?: vscode.CancellationToken;
+}
+
 /**
  * Segments a single file for the walk. No first-run wizard; assumes the user has
  * already configured a backend (or fails cleanly if not).
@@ -34,6 +44,7 @@ export async function segmentFileForWalk(
   store: SegmentStore,
   output: vscode.OutputChannel,
   uri: vscode.Uri,
+  options: SegmentFileOptions = {},
 ): Promise<SegmentFileResult> {
   const userConfig = await readUserConfig(context);
   let resolved;
@@ -82,30 +93,50 @@ export async function segmentFileForWalk(
     structuredOutputMode: resolved.structuredOutputMode,
   });
 
-  return await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: `CodeWalk: Analyzing ${document.fileName}…`,
-      cancellable: true,
-    },
-    async (_progress, token) => {
-      try {
-        const promptsDir = context.asAbsolutePath("prompts");
-        const segments = await segment(document, {
-          adapter,
-          promptsDir,
-          logger: (msg) => output.appendLine(msg),
-          token,
-        });
-        store.set(document.uri, segments);
-        output.appendLine(`[success] ${segments.length} segments for ${document.fileName}`);
-        return { ok: true, segmentCount: segments.length };
-      } catch (e) {
-        handleSegmentError(e, output);
-        return { ok: false, segmentCount: 0 };
-      }
-    },
-  );
+  options.tracker?.begin(document.uri);
+  const location = options.silent
+    ? vscode.ProgressLocation.Window
+    : vscode.ProgressLocation.Notification;
+  try {
+    return await vscode.window.withProgress(
+      {
+        location,
+        title: `CodeWalk: Analyzing ${document.fileName}…`,
+        cancellable: !options.silent,
+      },
+      async (_progress, progressToken) => {
+        // Merge the progress token (Cancel button) and any external token
+        // (e.g. End Walkthrough during a background run) into a single source.
+        const cts = new vscode.CancellationTokenSource();
+        const subs: vscode.Disposable[] = [
+          progressToken.onCancellationRequested(() => cts.cancel()),
+        ];
+        if (options.externalToken) {
+          subs.push(options.externalToken.onCancellationRequested(() => cts.cancel()));
+        }
+        try {
+          const promptsDir = context.asAbsolutePath("prompts");
+          const segments = await segment(document, {
+            adapter,
+            promptsDir,
+            logger: (msg) => output.appendLine(msg),
+            token: cts.token,
+          });
+          store.set(document.uri, segments);
+          output.appendLine(`[success] ${segments.length} segments for ${document.fileName}`);
+          return { ok: true, segmentCount: segments.length };
+        } catch (e) {
+          handleSegmentError(e, output);
+          return { ok: false, segmentCount: 0 };
+        } finally {
+          for (const s of subs) s.dispose();
+          cts.dispose();
+        }
+      },
+    );
+  } finally {
+    options.tracker?.end(document.uri);
+  }
 }
 
 function handleSegmentError(e: unknown, output: vscode.OutputChannel): void {

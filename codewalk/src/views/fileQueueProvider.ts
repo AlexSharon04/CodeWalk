@@ -1,9 +1,13 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
 import type { WalkSession } from "../services/walkSession";
+import type { SegmentStore } from "../engine/segmentStore";
+import type { SegmentationStatusTracker } from "../services/segmentationStatusTracker";
 
 const WORKSPACE_EXCLUDE_GLOB =
   "**/{node_modules,dist,out,build,.git,.next,.turbo,.vercel,.vscode-test,target,coverage,.idea,.pytest_cache,__pycache__}/**";
+
+type SegmentationStatus = "segmented" | "in-flight" | "pending";
 
 export class FileQueueProvider implements vscode.TreeDataProvider<FileQueueItem>, vscode.Disposable {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<FileQueueItem | undefined>();
@@ -11,8 +15,14 @@ export class FileQueueProvider implements vscode.TreeDataProvider<FileQueueItem>
   private workspaceFiles: vscode.Uri[] = [];
   private readonly subs: vscode.Disposable[] = [];
 
-  constructor(private readonly walkSession: WalkSession) {
+  constructor(
+    private readonly walkSession: WalkSession,
+    private readonly segStore: SegmentStore,
+    private readonly statusTracker: SegmentationStatusTracker,
+  ) {
     this.subs.push(walkSession.onDidChange(() => this._onDidChangeTreeData.fire(undefined)));
+    this.subs.push(segStore.onDidChange(() => this._onDidChangeTreeData.fire(undefined)));
+    this.subs.push(statusTracker.onDidChange(() => this._onDidChangeTreeData.fire(undefined)));
     void this.refreshWorkspaceFiles();
   }
 
@@ -42,8 +52,15 @@ export class FileQueueProvider implements vscode.TreeDataProvider<FileQueueItem>
     const queueUriSet = new Set(this.walkSession.state().fileQueue.map(u => u.toString()));
     return this.workspaceFiles.map(uri => {
       const checked = queueUriSet.has(uri.toString());
-      return new FileQueueItem(uri, checked);
+      const status = this.statusFor(uri);
+      return new FileQueueItem(uri, checked, status);
     });
+  }
+
+  private statusFor(uri: vscode.Uri): SegmentationStatus {
+    if (this.statusTracker.isInFlight(uri)) return "in-flight";
+    if ((this.segStore.get(uri)?.length ?? 0) > 0) return "segmented";
+    return "pending";
   }
 
   /** Called by the TreeView's onDidChangeCheckboxState wiring in extension.ts. */
@@ -65,6 +82,7 @@ export class FileQueueItem {
   constructor(
     readonly uri: vscode.Uri,
     readonly checked: boolean,
+    readonly status: SegmentationStatus = "pending",
   ) {}
 
   toTreeItem(): vscode.TreeItem {
@@ -78,8 +96,25 @@ export class FileQueueItem {
     item.checkboxState = this.checked
       ? vscode.TreeItemCheckboxState.Checked
       : vscode.TreeItemCheckboxState.Unchecked;
-    item.tooltip = relative;
+    item.tooltip = `${relative} — ${tooltipFor(this.status)}`;
+    item.iconPath = iconFor(this.status);
     item.contextValue = "codewalk.fileQueueItem";
     return item;
+  }
+}
+
+function iconFor(status: SegmentationStatus): vscode.ThemeIcon {
+  switch (status) {
+    case "in-flight": return new vscode.ThemeIcon("loading~spin");
+    case "segmented": return new vscode.ThemeIcon("check");
+    case "pending":   return new vscode.ThemeIcon("circle-outline");
+  }
+}
+
+function tooltipFor(status: SegmentationStatus): string {
+  switch (status) {
+    case "in-flight": return "Segmenting…";
+    case "segmented": return "Segmented — ready to walk";
+    case "pending":   return "Queued — segments on demand or via background pre-segmentation";
   }
 }

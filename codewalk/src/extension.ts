@@ -11,6 +11,7 @@ import { CodeWalkCommentController } from "./providers/commentController";
 import { PrefetchQueue } from "./engine/prefetchQueue";
 import { WalkSession } from "./services/walkSession";
 import { CodeWalkStatusBar } from "./services/statusBar";
+import { SegmentationStatusTracker } from "./services/segmentationStatusTracker";
 import { FileQueueProvider } from "./views/fileQueueProvider";
 import { readUserConfig } from "./utils/config";
 import { resolveBackend } from "./llm/presets";
@@ -29,7 +30,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const highlighter = new BlockHighlighter(store);
   const walkSession = new WalkSession(store);
   const statusBar = new CodeWalkStatusBar(walkSession, store);
-  const fileQueueProvider = new FileQueueProvider(walkSession);
+  const segmentationStatusTracker = new SegmentationStatusTracker();
+  const fileQueueProvider = new FileQueueProvider(walkSession, store, segmentationStatusTracker);
   const fileQueueView = vscode.window.createTreeView("codewalk.fileQueue", {
     treeDataProvider: fileQueueProvider,
     canSelectMany: false,
@@ -50,8 +52,20 @@ export function activate(context: vscode.ExtensionContext): void {
     lensProvider,
   );
 
-  const startCommand = registerStartWalkthrough(context, store, output, walkSession);
-  const navCommands = registerBlockNavCommands(context, walkSession, store, output);
+  const startCommand = registerStartWalkthrough(
+    context,
+    store,
+    output,
+    walkSession,
+    segmentationStatusTracker,
+  );
+  const navCommands = registerBlockNavCommands(
+    context,
+    walkSession,
+    store,
+    output,
+    segmentationStatusTracker,
+  );
 
   // Logger for modules that need structured output.
   const logger = (msg: string) => output.appendLine(msg);
@@ -195,15 +209,57 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
+  const endWalkthroughCommand = vscode.commands.registerCommand(
+    "codewalk.endWalkthrough",
+    () => {
+      commentController?.collapse();
+      store.clearAll();
+      walkSession.end();
+      output.appendLine("[walkthrough] ended by user");
+    },
+  );
+
   const closeHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
     store.clear(doc.uri);
   });
+
+  // Follow the user's editor focus while a walkthrough is active. Only update
+  // when the focused URI is already in the queue — clicking into an unrelated
+  // file should not auto-add it (that's the sidebar's job).
+  const activeEditorListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
+    if (!editor || !walkSession.isActive()) return;
+    const uri = editor.document.uri;
+    const inQueue = walkSession.state().fileQueue.some((q) => q.toString() === uri.toString());
+    if (!inQueue) return;
+    walkSession.setActive(uri, undefined);
+  });
+
+  // One-time hint about the status bar location. Many minimal VS Code setups
+  // hide the status bar by default — without this, the user gets zero progress
+  // feedback during a walkthrough and never knows what they're missing.
+  const STATUS_BAR_HINT_KEY = "codewalk.statusBarHintShown";
+  let statusBarHintSub: vscode.Disposable | undefined;
+  if (!context.globalState.get<boolean>(STATUS_BAR_HINT_KEY, false)) {
+    statusBarHintSub = walkSession.onDidChange(() => {
+      if (!walkSession.isActive()) return;
+      void context.globalState.update(STATUS_BAR_HINT_KEY, true);
+      statusBarHintSub?.dispose();
+      statusBarHintSub = undefined;
+      void vscode.window.showInformationMessage(
+        "CodeWalk shows progress in the status bar. If it's hidden, enable it via View → Appearance → Status Bar.",
+      );
+    });
+    context.subscriptions.push({
+      dispose: () => statusBarHintSub?.dispose(),
+    });
+  }
 
   context.subscriptions.push(
     output,
     store,
     walkSession,
     statusBar,
+    segmentationStatusTracker,
     fileQueueProvider,
     fileQueueView,
     fileQueueRefreshCommand,
@@ -214,7 +270,9 @@ export function activate(context: vscode.ExtensionContext): void {
     expandBlockCommand,
     resetApiKeyCommand,
     resetExplanationCacheCommand,
+    endWalkthroughCommand,
     closeHandler,
+    activeEditorListener,
     ...navCommands,
   );
 

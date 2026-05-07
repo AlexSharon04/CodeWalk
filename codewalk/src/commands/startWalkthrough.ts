@@ -7,12 +7,14 @@ import type { SegmentStore } from "../engine/segmentStore";
 import { runFirstRunWizard } from "./firstRunWizard";
 import { segmentFileForWalk } from "./segmentFile";
 import type { WalkSession } from "../services/walkSession";
+import type { SegmentationStatusTracker } from "../services/segmentationStatusTracker";
 
 export function registerStartWalkthrough(
   context: vscode.ExtensionContext,
   store: SegmentStore,
   output: vscode.OutputChannel,
   walkSession?: WalkSession,
+  tracker?: SegmentationStatusTracker,
 ): vscode.Disposable {
   return vscode.commands.registerCommand("codewalk.startWalkthrough", async () => {
     // Decide what to segment next. Order of precedence:
@@ -80,7 +82,7 @@ export function registerStartWalkthrough(
     // than the active editor.
     await vscode.window.showTextDocument(document, { preview: false });
 
-    const result = await segmentFileForWalk(context, store, output, document.uri);
+    const result = await segmentFileForWalk(context, store, output, document.uri, { tracker });
     if (!result.ok) return;
 
     // setActive both auto-adds (if missing from queue) and switches activeFileIndex,
@@ -88,7 +90,37 @@ export function registerStartWalkthrough(
     // current focus regardless of how this Start was triggered.
     walkSession?.setActive(document.uri, undefined);
     walkSession?.start();
+
+    // Optional fire-and-forget background pre-segmentation of the rest of the queue.
+    const preSegment = vscode.workspace
+      .getConfiguration("codewalk")
+      .get<boolean>("preSegmentQueuedFiles", false);
+    if (preSegment && walkSession) {
+      void preSegmentRest(context, walkSession, store, output, document.uri, tracker);
+    }
   });
+}
+
+async function preSegmentRest(
+  context: vscode.ExtensionContext,
+  walkSession: WalkSession,
+  store: SegmentStore,
+  output: vscode.OutputChannel,
+  alreadyDone: vscode.Uri,
+  tracker: SegmentationStatusTracker | undefined,
+): Promise<void> {
+  const queue = walkSession.state().fileQueue;
+  for (const uri of queue) {
+    if (uri.toString() === alreadyDone.toString()) continue;
+    if ((store.get(uri)?.length ?? 0) > 0) continue;
+    if (!walkSession.isActive()) {
+      output.appendLine(`[preSegment] aborted — walkthrough ended`);
+      return;
+    }
+    output.appendLine(`[preSegment] starting ${path.basename(uri.fsPath)}`);
+    await segmentFileForWalk(context, store, output, uri, { silent: true, tracker });
+    output.appendLine(`[preSegment] done ${path.basename(uri.fsPath)}`);
+  }
 }
 
 function pickTargetUri(

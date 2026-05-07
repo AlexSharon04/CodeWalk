@@ -21,6 +21,12 @@ export class SegmentStore implements vscode.Disposable {
     }
   }
 
+  clearAll(): void {
+    const uris = this.knownUris();
+    this.map.clear();
+    for (const uri of uris) this._onDidChange.fire(uri);
+  }
+
   knownUris(): vscode.Uri[] {
     return Array.from(this.map.keys()).map(s => vscode.Uri.parse(s));
   }

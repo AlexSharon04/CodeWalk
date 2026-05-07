@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { SegmentStore } from "../engine/segmentStore";
 import type { WalkSession, NavTarget } from "../services/walkSession";
+import type { SegmentationStatusTracker } from "../services/segmentationStatusTracker";
 import type { Segment } from "../types";
 import { segmentFileForWalk } from "./segmentFile";
 
@@ -9,6 +10,7 @@ export function registerBlockNavCommands(
   walkSession: WalkSession,
   segStore: SegmentStore,
   output: vscode.OutputChannel,
+  tracker?: SegmentationStatusTracker,
 ): vscode.Disposable[] {
   const next = vscode.commands.registerCommand("codewalk.nextBlock", async () => {
     const target = walkSession.peekNext();
@@ -16,7 +18,7 @@ export function registerBlockNavCommands(
       vscode.window.showInformationMessage("CodeWalk: end of walkthrough.");
       return;
     }
-    await navigateTo(context, walkSession, segStore, output, target, +1);
+    await navigateTo(context, walkSession, segStore, output, target, +1, tracker);
   });
 
   const prev = vscode.commands.registerCommand("codewalk.prevBlock", async () => {
@@ -25,7 +27,7 @@ export function registerBlockNavCommands(
       vscode.window.showInformationMessage("CodeWalk: at the first block.");
       return;
     }
-    await navigateTo(context, walkSession, segStore, output, target, -1);
+    await navigateTo(context, walkSession, segStore, output, target, -1, tracker);
   });
 
   const skip = vscode.commands.registerCommand("codewalk.skipFile", async () => {
@@ -38,7 +40,7 @@ export function registerBlockNavCommands(
       vscode.window.showInformationMessage(message);
       return;
     }
-    await navigateTo(context, walkSession, segStore, output, target, +1);
+    await navigateTo(context, walkSession, segStore, output, target, +1, tracker);
   });
 
   return [next, prev, skip];
@@ -51,13 +53,14 @@ async function navigateTo(
   output: vscode.OutputChannel,
   target: NavTarget,
   direction: 1 | -1,
+  tracker: SegmentationStatusTracker | undefined,
 ): Promise<void> {
   // Placeholder target — next file isn't segmented yet. Trigger segmentation
   // on-demand, then re-issue the original direction's peek so we land on the
   // right block (first or last) of the newly-segmented file.
   if (target.segmentId === "") {
     walkSession.applyTarget(target);
-    const result = await segmentFileForWalk(context, segStore, output, target.uri);
+    const result = await segmentFileForWalk(context, segStore, output, target.uri, { tracker });
     if (!result.ok || result.segmentCount === 0) return;
     const segs = segStore.get(target.uri);
     if (!segs || segs.length === 0) return;
@@ -68,7 +71,7 @@ async function navigateTo(
       blockIndex,
       fileIndex: target.fileIndex,
     };
-    await navigateTo(context, walkSession, segStore, output, resolved, direction);
+    await navigateTo(context, walkSession, segStore, output, resolved, direction, tracker);
     return;
   }
 

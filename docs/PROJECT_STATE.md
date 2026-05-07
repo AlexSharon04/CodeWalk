@@ -1,9 +1,9 @@
 # CodeWalk — Project State
 
-**Last updated:** 2026-05-06 (session end)
-**Current phase:** Phase 2c + Phase 3 nav — **code complete, two post-walkthrough UX fixes shipped, final sprint queued**
-**Current branch:** `phase2c-narrative-and-nav` (11 commits ahead of `phase1-core-loop`)
-**Current step:** Branch is ready to merge once manual verification on both Anthropic and Groq presets passes. Final sprint (Phase 4 + UX polish raised this session) is queued for the next session — see "Final sprint scope" below.
+**Last updated:** 2026-05-06 (final-sprint UX polish landed)
+**Current phase:** Phase 2c + Phase 3 nav + **Final UX-polish sprint shipped**. Phase 4 line-by-line annotations remain parked as the next sprint.
+**Current branch:** `phase2c-narrative-and-nav` (12+ commits ahead of `phase1-core-loop`)
+**Current step:** Branch is ready to merge once manual verification on both Anthropic and Groq presets passes. The final-sprint UX work landed here — see "Final-sprint shipped (2026-05-06)" below. Phase 4 line-by-line is now the only outstanding feature track.
 
 ## Phase status
 - [x] Phase 1 — Core Loop — **code complete 2026-04-17; cloud path verified 2026-04-20 against Anthropic (Claude Sonnet 4.6) and Groq (llama-3.3-70b-versatile)**
@@ -257,9 +257,36 @@ Two issues surfaced once the user F5-tested the Phase 3 nav slice. Both are fixe
 | `f32ff56` | Alt+S to a queued-but-unsegmented next file collapsed to "walkthrough complete" | `firstBlockOfActive` returns a placeholder NavTarget (segmentId="") matching `computeStep`'s shape; blockNav's existing placeholder branch triggers segmentation and lands the user. Toast also distinguishes "only file in queue → check more in the sidebar" from "true end of walkthrough." |
 | `e76892d` | Start CodeWalk only segmented `vscode.window.activeTextEditor`, ignoring sidebar checkboxes — so multi-file queues never formed naturally and Alt+S had nothing to advance to | Start CodeWalk now consults `WalkSession.fileQueue` first; segments the first un-segmented queued file; falls back to the active editor when the queue is empty. Sidebar gains a Start CodeWalk title-bar action and a `viewsWelcome` empty-state hint teaching the workflow. |
 
+### Final-sprint shipped (2026-05-06)
+
+UX polish + dispose lifecycle landed on `phase2c-narrative-and-nav`. Plan: `docs/superpowers/plans/2026-05-06-codewalk-final-sprint-ux-polish.md`.
+
+| # | Scope | Files touched |
+|---|---|---|
+| 1 | **End walkthrough command + dispose lifecycle.** New `codewalk.endWalkthrough` command, palette + sidebar title-bar action gated on `codewalk.active`. Collapses open thread, calls new `SegmentStore.clearAll()` so decorations + CodeLenses vanish, calls `walkSession.end()`. `ExplanationStore` cache survives — re-running Start CodeWalk keeps prior explanations warm. | `extension.ts`, `engine/segmentStore.ts`, `package.json` |
+| 2 | **Difficulty colors on CodeLens labels.** ThemeIcon prefix per difficulty: `$(circle-outline)` trivial, `$(circle-filled)` standard, `$(warning)` complex, `$(error)` critical. Theme-aware via VS Code's built-in icon foreground colors. (Phase 4 deliverable #4 from `IMPLEMENTATION_PLAN.md`.) | `providers/codeLensProvider.ts` |
+| 3 | **`onDidChangeActiveTextEditor` listener.** When walkthrough is active and the user clicks into a queued file's tab, `walkSession.setActive(uri, undefined)` so status bar follows focus. No auto-add for non-queued files. | `extension.ts` |
+| 4 | **Sidebar segmentation status indicator.** New `SegmentationStatusTracker` service publishes a "currently segmenting" set; `FileQueueProvider` listens and renders `loading~spin` / `check` / `circle-outline` icons per row. Tracker is bracketed around every `segmentFileForWalk` call. | `services/segmentationStatusTracker.ts`, `views/fileQueueProvider.ts`, `commands/segmentFile.ts`, `commands/startWalkthrough.ts`, `commands/blockNav.ts`, `extension.ts` |
+| 5 | **Background pre-segmentation setting.** `codewalk.preSegmentQueuedFiles` (default `false`). After Start CodeWalk segments the first file, fire-and-forget loop hits `segmentFileForWalk(uri, { silent: true, tracker })` for each remaining un-segmented file in the queue. `silent` switches the progress location from Notification to Window so the user doesn't get spammed. Stops if walkthrough ends mid-loop. | `commands/startWalkthrough.ts`, `commands/segmentFile.ts`, `package.json` |
+| 6 | **Status bar visibility one-time hint.** First time `codewalk.active` becomes true, a one-shot toast tells the user where progress shows up. Gated by `globalState.get("codewalk.statusBarHintShown")`. | `extension.ts` |
+| 7 | **Tests for `clearAll` + `SegmentationStatusTracker`.** Unit-level coverage; integration verified via `tsc --noEmit` + `npm run build` + F5 EDH per `project_vscode_test_wedge.md` workflow. | `test/suite/segmentStore.test.ts`, `test/suite/segmentationStatusTracker.test.ts` |
+
+Out of scope (deferred to next sprint): **Phase 4 line-by-line annotations** — `prompts/lineByLine.md` agent + ADR-005 contract + `after.contentText` decorations + HoverProvider + comment-thread title button + eval harness. Bundling those with this UX sprint would have risked shipping nothing well.
+
+### Final-sprint manual verification checklist
+
+1. **End walkthrough.** Start CodeWalk on `sample.ts`. Click a CodeLens. Run **CodeWalk: End Walkthrough** from the palette OR click the `$(close)` icon in the sidebar title. Verify: open thread collapses, decorations + CodeLenses vanish, status bar hides, sidebar checkboxes clear (no segmented files left), `codewalk.active` flips off (Alt+↓ falls through to Move Line Down).
+2. **Sidebar segmentation status.** Check 3 files in the sidebar. Run Start CodeWalk. While segmentation is in flight, that file's row shows the spinner; once done, ✓. The other 2 rows show ○. Toggle `codewalk.preSegmentQueuedFiles = true`, reload, repeat — files 2 and 3 cycle ○ → spinner → ✓ in the background while you read file 1.
+3. **Active-editor listener.** Mid-walkthrough, switch to a different queued file via Ctrl+Click in the explorer (don't trigger a CodeLens). Status bar updates to show the new file index; block index resets to "—".
+4. **Difficulty colors on CodeLens.** Open `test/fixtures/sample.ts`. Verify each difficulty shows its distinct icon (○ trivial, ● standard, ⚠ complex, ✕ critical). Switch to a light theme, verify icons remain visible.
+5. **Status bar hint.** First time CodeWalk activates a walkthrough on this profile, a one-time toast fires. Run Start CodeWalk again — no toast. Reload window — no toast.
+6. **No regressions.** Phase 2c+3 manual checklist (above) still passes.
+
 ### Final sprint scope (next session)
 
 Two layers — Phase 4 (planned) and UX-polish backlog (raised this session). Both can be one slice or split.
+
+**Note (2026-05-06):** the UX-polish backlog has now landed; only Phase 4 line-by-line remains.
 
 #### Phase 4 — Level 2 & polish (per `docs/IMPLEMENTATION_PLAN.md` §Phase 4)
 

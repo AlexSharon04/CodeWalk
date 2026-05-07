@@ -82,4 +82,22 @@ suite("SegmentStore", () => {
     assert.strictEqual(s.get(b)?.[0].startLine, 100);
     s.dispose();
   });
+
+  test("clearAll wipes every URI and fires onDidChange for each", () => {
+    const s = new SegmentStore();
+    const a = vscode.Uri.file("/tmp/a");
+    const b = vscode.Uri.file("/tmp/b");
+    s.set(a, [fakeSegment(1)]);
+    s.set(b, [fakeSegment(100)]);
+    const fired: string[] = [];
+    const sub = s.onDidChange((u) => fired.push(u.toString()));
+    s.clearAll();
+    sub.dispose();
+    assert.strictEqual(s.get(a), undefined);
+    assert.strictEqual(s.get(b), undefined);
+    assert.strictEqual(fired.length, 2);
+    assert.ok(fired.includes(a.toString()));
+    assert.ok(fired.includes(b.toString()));
+    s.dispose();
+  });
 });

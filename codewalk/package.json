@@ -11,6 +11,7 @@
     "onCommand:codewalk.startWalkthrough",
     "onCommand:codewalk.resetApiKey",
     "onCommand:codewalk.resetExplanationCache",
+    "onCommand:codewalk.endWalkthrough",
     "onCommand:codewalk.nextBlock",
     "onCommand:codewalk.prevBlock",
     "onCommand:codewalk.skipFile"
@@ -24,6 +25,7 @@
       { "command": "codewalk.nextBlock", "title": "CodeWalk: Next Block" },
       { "command": "codewalk.prevBlock", "title": "CodeWalk: Previous Block" },
       { "command": "codewalk.skipFile", "title": "CodeWalk: Skip File" },
+      { "command": "codewalk.endWalkthrough", "title": "CodeWalk: End Walkthrough", "icon": "$(close)" },
       { "command": "codewalk.refreshFileQueue", "title": "CodeWalk: Refresh File List", "icon": "$(refresh)" }
     ],
     "viewsContainers": {
@@ -44,9 +46,14 @@
           "group": "navigation@1"
         },
         {
+          "command": "codewalk.endWalkthrough",
+          "when": "view == codewalk.fileQueue && codewalk.active",
+          "group": "navigation@2"
+        },
+        {
           "command": "codewalk.refreshFileQueue",
           "when": "view == codewalk.fileQueue",
-          "group": "navigation@2"
+          "group": "navigation@3"
         }
       ]
     },
@@ -116,6 +123,11 @@
           "type": "number",
           "default": 400,
           "description": "Skip explanation for blocks longer than this many lines."
+        },
+        "codewalk.preSegmentQueuedFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "After Start CodeWalk segments the first file, automatically segment every other checked file in the sidebar in the background. Costs extra LLM calls but makes Alt+↓ across files feel instant."
         }
       }
     }
