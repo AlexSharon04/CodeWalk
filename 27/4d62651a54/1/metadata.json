@@ -1,0 +1,32 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "274d62651a54",
+  "session_id": "e46e5752-d808-4724-b1d9-22af4022658e",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-07T00:11:23.9608004Z",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "CodeWalk-design-doc.md",
+    "docs/CodeWalk-design-doc.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "bb38144552e0",
+  "token_usage": {
+    "input_tokens": 85,
+    "cache_creation_tokens": 231157,
+    "cache_read_tokens": 9681036,
+    "output_tokens": 44405,
+    "api_call_count": 75
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-07T00:11:21.7963324Z",
+    "agent_lines": 886,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 886,
+    "agent_percentage": 100
+  }
+}
