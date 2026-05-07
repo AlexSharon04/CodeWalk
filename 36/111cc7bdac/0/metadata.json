@@ -1,0 +1,40 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "36111cc7bdac",
+  "session_id": "e46e5752-d808-4724-b1d9-22af4022658e",
+  "strategy": "manual-commit",
+  "created_at": "2026-05-07T00:12:14.8165532Z",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "codewalk/src/engine/segmentStore.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/package.json",
+    "codewalk/src/providers/codeLensProvider.ts",
+    "codewalk/src/commands/segmentFile.ts",
+    "codewalk/src/views/fileQueueProvider.ts",
+    "codewalk/src/commands/startWalkthrough.ts",
+    "codewalk/src/commands/blockNav.ts",
+    "codewalk/test/suite/segmentStore.test.ts",
+    "docs/PROJECT_STATE.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-7[1m]",
+  "turn_id": "bb38144552e0",
+  "token_usage": {
+    "input_tokens": 87,
+    "cache_creation_tokens": 232900,
+    "cache_read_tokens": 10011902,
+    "output_tokens": 45672,
+    "api_call_count": 77
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-05-07T00:12:12.5794632Z",
+    "agent_lines": 273,
+    "human_added": 363,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 636,
+    "agent_percentage": 42.924528301886795
+  }
+}

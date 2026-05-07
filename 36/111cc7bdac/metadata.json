@@ -1,0 +1,34 @@
+{
+  "cli_version": "dev",
+  "checkpoint_id": "36111cc7bdac",
+  "strategy": "manual-commit",
+  "branch": "phase2c-narrative-and-nav",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "codewalk/package.json",
+    "codewalk/src/commands/blockNav.ts",
+    "codewalk/src/commands/segmentFile.ts",
+    "codewalk/src/commands/startWalkthrough.ts",
+    "codewalk/src/engine/segmentStore.ts",
+    "codewalk/src/extension.ts",
+    "codewalk/src/providers/codeLensProvider.ts",
+    "codewalk/src/views/fileQueueProvider.ts",
+    "codewalk/test/suite/segmentStore.test.ts",
+    "docs/PROJECT_STATE.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/36/111cc7bdac/0/metadata.json",
+      "transcript": "/36/111cc7bdac/0/full.jsonl",
+      "content_hash": "/36/111cc7bdac/0/content_hash.txt",
+      "prompt": "/36/111cc7bdac/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 87,
+    "cache_creation_tokens": 232900,
+    "cache_read_tokens": 10011902,
+    "output_tokens": 45672,
+    "api_call_count": 77
+  }
+}
