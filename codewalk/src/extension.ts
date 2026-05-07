@@ -24,7 +24,8 @@ import { OpenAICompatibleAdapter } from "./llm/openAiCompatibleAdapter";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("CodeWalk");
-  const store = new SegmentStore();
+  const persistLogger = (msg: string) => output.appendLine(msg);
+  const store = new SegmentStore(context.workspaceState, persistLogger);
 
   // Fire-and-forget: move any plaintext API key out of settings.json into SecretStorage.
   void migrateLegacyApiKey(context).catch((e) =>
@@ -33,7 +34,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const lensProvider = new CodeWalkLensProvider(store);
   const highlighter = new BlockHighlighter(store);
-  const walkSession = new WalkSession(store);
+  const walkSession = new WalkSession(store, context.workspaceState, persistLogger);
   const statusBar = new CodeWalkStatusBar(walkSession, store);
   const segmentationStatusTracker = new SegmentationStatusTracker();
   const fileQueueProvider = new FileQueueProvider(walkSession, store, segmentationStatusTracker);
@@ -265,9 +266,8 @@ export function activate(context: vscode.ExtensionContext): void {
     logger,
   });
 
-  const closeHandler = vscode.workspace.onDidCloseTextDocument((doc) => {
-    store.clear(doc.uri);
-  });
+  // Note: tabs closing no longer clears segments. State persists across tab close
+  // and window reload until the user runs CodeWalk: End Walkthrough.
 
   // Follow the user's editor focus while a walkthrough is active. Only update
   // when the focused URI is already in the queue — clicking into an unrelated
@@ -319,10 +319,15 @@ export function activate(context: vscode.ExtensionContext): void {
     resetLineByLineCacheCommand,
     endWalkthroughCommand,
     toggleLineByLineCommand,
-    closeHandler,
     activeEditorListener,
     ...navCommands,
   );
+
+  // Rehydrate persisted state AFTER all listeners (highlighter, lens provider,
+  // status bar, sidebar, comment controller subscriptions) are wired. The events
+  // fired from rehydrate would be lost if subscribers attach later.
+  store.rehydrate();
+  walkSession.rehydrate();
 
   output.appendLine("CodeWalk activated.");
 }

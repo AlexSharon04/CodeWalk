@@ -265,3 +265,115 @@ suite("WalkSession", () => {
     }, 0);
   });
 });
+
+class FakeMemento implements vscode.Memento {
+  private readonly data = new Map<string, unknown>();
+  private readonly all = new Set<string>();
+  keys(): readonly string[] { return Array.from(this.all); }
+  get<T>(key: string, defaultValue?: T): T | undefined {
+    return (this.data.get(key) as T) ?? defaultValue;
+  }
+  async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) {
+      this.data.delete(key);
+      this.all.delete(key);
+      return;
+    }
+    this.data.set(key, value);
+    this.all.add(key);
+  }
+  setKeysForSync(): void { /* noop */ }
+}
+
+suite("WalkSession — persistence", () => {
+  test("addFile persists state under walkSession:state", async () => {
+    const memento = new FakeMemento();
+    const store = new SegmentStore();
+    const ws = new WalkSession(store, memento);
+    ws.addFile(vscode.Uri.file("/tmp/a.ts"));
+    await new Promise((r) => setImmediate(r));
+    assert.ok(memento.keys().some((k) => k === "walkSession:state"));
+    ws.dispose();
+    store.dispose();
+  });
+
+  test("end clears the persisted state", async () => {
+    const memento = new FakeMemento();
+    const store = new SegmentStore();
+    const ws = new WalkSession(store, memento);
+    ws.addFile(vscode.Uri.file("/tmp/a.ts"));
+    await new Promise((r) => setImmediate(r));
+    ws.end();
+    await new Promise((r) => setImmediate(r));
+    assert.ok(!memento.keys().some((k) => k === "walkSession:state"));
+    ws.dispose();
+    store.dispose();
+  });
+
+  test("rehydrate restores queue + activeFileIndex + activeBlockIndex", async () => {
+    const memento = new FakeMemento();
+    const store = new SegmentStore();
+    const a = vscode.Uri.file("/tmp/rh-a.ts");
+    const b = vscode.Uri.file("/tmp/rh-b.ts");
+
+    // Seed the memento via a first WalkSession instance.
+    const seed = new WalkSession(store, memento);
+    seed.setQueue([a, b]);
+    store.set(a, [seg("s1", 1), seg("s2", 10)]);
+    seed.setActive(a, "s2");
+    await new Promise((r) => setImmediate(r));
+    seed.dispose();
+
+    // Fresh instance — simulates window reload.
+    const fresh = new WalkSession(store, memento);
+    fresh.rehydrate();
+    const state = fresh.state();
+    assert.strictEqual(state.fileQueue.length, 2);
+    assert.strictEqual(state.fileQueue[0]!.toString(), a.toString());
+    assert.strictEqual(state.activeFileIndex, 0);
+    assert.strictEqual(state.activeBlockIndex, 1);
+    assert.strictEqual(fresh.isActive(), true);
+    fresh.dispose();
+    store.dispose();
+  });
+
+  test("rehydrate drops malformed persisted state", async () => {
+    const memento = new FakeMemento();
+    await memento.update("walkSession:state", "not the right shape");
+    const store = new SegmentStore();
+    const ws = new WalkSession(store, memento);
+    ws.rehydrate();
+    assert.strictEqual(ws.state().fileQueue.length, 0);
+    // Memento entry should be cleaned up.
+    assert.strictEqual(memento.keys().includes("walkSession:state"), false);
+    ws.dispose();
+    store.dispose();
+  });
+
+  test("rehydrate is a no-op when there's nothing to restore", () => {
+    const memento = new FakeMemento();
+    const store = new SegmentStore();
+    const ws = new WalkSession(store, memento);
+    ws.rehydrate();
+    assert.strictEqual(ws.state().fileQueue.length, 0);
+    assert.strictEqual(ws.isActive(), false);
+    ws.dispose();
+    store.dispose();
+  });
+
+  test("rehydrate clamps activeFileIndex if queue shrank between sessions", async () => {
+    const memento = new FakeMemento();
+    // Seed memento with an out-of-bounds activeFileIndex.
+    await memento.update("walkSession:state", {
+      fileQueue: ["file:///tmp/only.ts"],
+      activeFileIndex: 5,
+      activeBlockIndex: 0,
+    });
+    const store = new SegmentStore();
+    const ws = new WalkSession(store, memento);
+    ws.rehydrate();
+    assert.strictEqual(ws.state().activeFileIndex, 0);
+    ws.dispose();
+    store.dispose();
+  });
+});

@@ -14,6 +14,25 @@ export interface NavTarget {
   readonly fileIndex: number;
 }
 
+interface PersistedState {
+  fileQueue: string[];
+  activeFileIndex: number;
+  activeBlockIndex: number;
+}
+
+const PERSIST_KEY = "walkSession:state";
+
+function isPersisted(x: unknown): x is PersistedState {
+  if (!x || typeof x !== "object") return false;
+  const o = x as PersistedState;
+  return (
+    Array.isArray(o.fileQueue)
+    && o.fileQueue.every((s) => typeof s === "string")
+    && typeof o.activeFileIndex === "number"
+    && typeof o.activeBlockIndex === "number"
+  );
+}
+
 export class WalkSession implements vscode.Disposable {
   private fileQueue: vscode.Uri[] = [];
   private activeFileIndex = -1;
@@ -21,7 +40,43 @@ export class WalkSession implements vscode.Disposable {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
-  constructor(private readonly segStore: SegmentStore) {}
+  constructor(
+    private readonly segStore: SegmentStore,
+    private readonly memento?: vscode.Memento,
+    private readonly logger?: (msg: string) => void,
+  ) {}
+
+  /**
+   * Restore the queue + active indices from the memento. Call AFTER all
+   * subscribers (status bar, sidebar, comment controller wiring) are wired
+   * so the rehydrate fires onDidChange for them.
+   */
+  rehydrate(): void {
+    if (!this.memento) return;
+    const raw = this.memento.get<unknown>(PERSIST_KEY);
+    if (raw === undefined) return;
+    if (!isPersisted(raw)) {
+      this.logger?.(`[walkSession] WARN dropping malformed persisted state`);
+      void this.memento.update(PERSIST_KEY, undefined);
+      return;
+    }
+    const uris: vscode.Uri[] = [];
+    for (const s of raw.fileQueue) {
+      try {
+        uris.push(vscode.Uri.parse(s));
+      } catch {
+        this.logger?.(`[walkSession] WARN dropping unparseable URI ${s}`);
+      }
+    }
+    this.fileQueue = uris;
+    this.activeFileIndex = Math.min(raw.activeFileIndex, uris.length - 1);
+    this.activeBlockIndex = raw.activeBlockIndex;
+    this.logger?.(
+      `[walkSession] rehydrated queue=${uris.length} activeFile=${this.activeFileIndex} activeBlock=${this.activeBlockIndex}`,
+    );
+    void this.refreshContextKey();
+    this._onDidChange.fire();
+  }
 
   isActive(): boolean {
     return this.activeFileIndex >= 0;
@@ -50,6 +105,7 @@ export class WalkSession implements vscode.Disposable {
     this.activeFileIndex = this.fileQueue.length > 0 ? 0 : -1;
     this.activeBlockIndex = -1;
     void this.refreshContextKey();
+    this.persist();
     this._onDidChange.fire();
   }
 
@@ -58,6 +114,7 @@ export class WalkSession implements vscode.Disposable {
     this.fileQueue.push(uri);
     if (this.activeFileIndex === -1) this.activeFileIndex = 0;
     void this.refreshContextKey();
+    this.persist();
     this._onDidChange.fire();
   }
 
@@ -78,6 +135,7 @@ export class WalkSession implements vscode.Disposable {
         this.activeFileIndex = this.fileQueue.length - 1;
       }
     }
+    this.persist();
     this._onDidChange.fire();
   }
 
@@ -86,6 +144,7 @@ export class WalkSession implements vscode.Disposable {
       this.activeFileIndex = 0;
     }
     void this.refreshContextKey();
+    this.persist();
     this._onDidChange.fire();
   }
 
@@ -94,6 +153,7 @@ export class WalkSession implements vscode.Disposable {
     this.activeFileIndex = -1;
     this.activeBlockIndex = -1;
     void this.refreshContextKey();
+    this.persistClear();
     this._onDidChange.fire();
   }
 
@@ -109,6 +169,7 @@ export class WalkSession implements vscode.Disposable {
     }
     this.activeBlockIndex = segmentId ? this.indexOfSegment(uri, segmentId) : -1;
     void this.refreshContextKey();
+    this.persist();
     this._onDidChange.fire();
   }
 
@@ -136,6 +197,7 @@ export class WalkSession implements vscode.Disposable {
     }
     // activeFileIndex unchanged (next file shifted into this slot) or clamped above.
     this.activeBlockIndex = -1;
+    this.persist();
     this._onDidChange.fire();
     return this.firstBlockOfActive();
   }
@@ -144,12 +206,34 @@ export class WalkSession implements vscode.Disposable {
   applyTarget(target: NavTarget): void {
     this.activeFileIndex = target.fileIndex;
     this.activeBlockIndex = target.blockIndex;
+    this.persist();
     this._onDidChange.fire();
   }
 
   dispose(): void {
     void this.refreshContextKey(false);
     this._onDidChange.dispose();
+  }
+
+  private persist(): void {
+    if (!this.memento) return;
+    const state: PersistedState = {
+      fileQueue: this.fileQueue.map((u) => u.toString()),
+      activeFileIndex: this.activeFileIndex,
+      activeBlockIndex: this.activeBlockIndex,
+    };
+    this.memento.update(PERSIST_KEY, state).then(
+      () => { /* ok */ },
+      (err) => this.logger?.(`[walkSession] WARN persistence failed: ${(err as Error).message}`),
+    );
+  }
+
+  private persistClear(): void {
+    if (!this.memento) return;
+    this.memento.update(PERSIST_KEY, undefined).then(
+      () => { /* ok */ },
+      (err) => this.logger?.(`[walkSession] WARN persistence clear failed: ${(err as Error).message}`),
+    );
   }
 
   private indexOfSegment(uri: vscode.Uri, segmentId: string): number {
